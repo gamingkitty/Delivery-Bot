@@ -78,6 +78,22 @@ class ArduinoIO:
     def analog_read(self, pin):
         return self._send_command(f"AREAD {pin}", expect_value=True)
 
+    def encoder_read(self, encoder_index):
+        encoder_index = int(encoder_index)
+
+        if encoder_index not in {1, 2}:
+            raise ValueError("encoder_index must be 1 or 2")
+
+        return self._send_command(f"ENCREAD {encoder_index}", expect_value=True)
+
+    def encoder_reset(self, encoder_index):
+        encoder_index = int(encoder_index)
+
+        if encoder_index not in {1, 2}:
+            raise ValueError("encoder_index must be 1 or 2")
+
+        self._send_command(f"ENCRESET {encoder_index}")
+
     def servo_write(self, pin, angle):
         """
         Move a servo to an angle from 0 to 180 degrees.
