@@ -1,104 +1,86 @@
-import os
-import sys
-import time
 from smbus2 import SMBus, i2c_msg
 
 
 class Sonar:
-    __units = {"mm":0, "cm":1}
-    __dist_reg = 0
+    I2C_ADDR = 0x77
+    BUS_ID = 1
+    DISTANCE_REG = 0
+    MAX_DISTANCE_MM = 5000
 
-    __RGB_MODE = 2
-    __RGB1_R = 3
-    __RGB1_G = 4
-    __RGB1_B = 5
-    __RGB2_R = 6
-    __RGB2_G = 7
-    __RGB2_B = 8
+    RGB_MODE_REG = 2
+    COLOR_REGS = (3, 6)
+    BREATH_REGS = (9, 12)
 
-    __RGB1_R_BREATHING_CYCLE = 9
-    __RGB1_G_BREATHING_CYCLE = 10
-    __RGB1_B_BREATHING_CYCLE = 11
-    __RGB2_R_BREATHING_CYCLE = 12
-    __RGB2_G_BREATHING_CYCLE = 13
-    __RGB2_B_BREATHING_CYCLE = 14
-    def __init__(self):
-        self.i2c_addr = 0x77
-        self.i2c = 1
-        self.Pixels = [0,0]
-        self.RGBMode = 0
+    def __init__(self, i2c_addr=I2C_ADDR, bus_id=BUS_ID):
+        self.i2c_addr = i2c_addr
+        self.bus_id = bus_id
+        self.pixels = [0, 0]
 
-    def __getattr(self, attr):
-        if attr in self.__units:
-            return self.__units[attr]
-        if attr == "Distance":
-            return self.getDistance()
-        else:
-            raise AttributeError('Unknow attribute : %s'%attr)
+    def _write_byte(self, register: int, value: int) -> bool:
+        try:
+            with SMBus(self.bus_id) as bus:
+                bus.write_byte_data(self.i2c_addr, register, value & 0xFF)
+        except OSError:
+            return False
 
-    def set_rgb_mode(self, mode):
-        with SMBus(self.i2c) as bus:
-            try:
-                bus.write_byte_data(self.i2c_addr, self.__RGB_MODE, mode)
-            except:
-                pass
+        return True
 
-    def set_color(self, index, rgb):
-        if index != 0 and index != 1:
-            return 
-        start_reg = 3 if index == 0 else 6
-        with SMBus(self.i2c) as bus:
-            try:
-                bus.write_byte_data(self.i2c_addr, start_reg, 0xFF & (rgb >> 16))
-                bus.write_byte_data(self.i2c_addr, start_reg+1, 0xFF & (rgb >> 8))
-                bus.write_byte_data(self.i2c_addr, start_reg+2, 0xFF & rgb)
-                self.Pixels[index] = rgb
-            except:
-                pass
+    def set_rgb_mode(self, mode: int) -> bool:
+        return self._write_byte(self.RGB_MODE_REG, int(mode))
 
-    def get_color(self, index):
-        if index != 0 and index != 1:
-            raise ValueError("Invalid pixel index", index)
-        return ((self.Pixels[index] >> 16) & 0xFF,
-                (self.Pixels[index] >> 8) & 0xFF,
-                self.Pixels[index] & 0xFF)
+    def set_color(self, index: int, rgb: int) -> bool:
+        self._require_pixel(index)
+        rgb = int(rgb)
+        start_reg = self.COLOR_REGS[index]
+        values = ((rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF)
 
-    def set_breath_cycle(self, index, rgb, cycle):
-        if index != 0 and index != 1:
-            return
-        if rgb < 0 or rgb > 2:
-            return
-        start_reg = 9 if index == 0 else 12
-        cycle = int(cycle / 100)
-        with SMBus(self.i2c) as bus:
-            try:
-                bus.write_byte_data(self.i2c_addr, start_reg + rgb, cycle)
-            except:
-                pass
+        writes_ok = all(
+            self._write_byte(start_reg + offset, value)
+            for offset, value in enumerate(values)
+        )
+
+        if writes_ok:
+            self.pixels[index] = rgb
+            return True
+
+        return False
+
+    def get_color(self, index: int):
+        self._require_pixel(index)
+        rgb = self.pixels[index]
+        return (rgb >> 16) & 0xFF, (rgb >> 8) & 0xFF, rgb & 0xFF
+
+    def set_breath_cycle(self, index: int, rgb_channel: int, cycle_ms: int) -> bool:
+        self._require_pixel(index)
+
+        if rgb_channel not in {0, 1, 2}:
+            raise ValueError("rgb_channel must be 0, 1, or 2")
+
+        register = self.BREATH_REGS[index] + rgb_channel
+        return self._write_byte(register, int(cycle_ms / 100))
 
     def start_symphony(self):
         self.set_rgb_mode(1)
-        self.set_breath_cycle(1,0, 2000)
-        self.set_breath_cycle(1,1, 3300)
-        self.set_breath_cycle(1,2, 4700)
-        self.set_breath_cycle(0,0, 4600)
-        self.set_breath_cycle(0,1, 2000)
-        self.set_breath_cycle(0,2, 3400)
+        self.set_breath_cycle(1, 0, 2000)
+        self.set_breath_cycle(1, 1, 3300)
+        self.set_breath_cycle(1, 2, 4700)
+        self.set_breath_cycle(0, 0, 4600)
+        self.set_breath_cycle(0, 1, 2000)
+        self.set_breath_cycle(0, 2, 3400)
 
-
-    def get_distance(self):
-        dist = 99999
-        with SMBus(self.i2c) as bus:
-            try:
-                msg = i2c_msg.write(self.i2c_addr, [0,])
-                bus.i2c_rdwr(msg)
+    def get_distance(self) -> int:
+        try:
+            with SMBus(self.bus_id) as bus:
+                bus.i2c_rdwr(i2c_msg.write(self.i2c_addr, [self.DISTANCE_REG]))
                 read = i2c_msg.read(self.i2c_addr, 2)
                 bus.i2c_rdwr(read)
-                dist = int.from_bytes(bytes(list(read)), byteorder='little', signed=False)
-            except:
-                pass
-            if dist > 5000:
-                dist = 5000
-        return dist
+        except OSError:
+            return self.MAX_DISTANCE_MM
 
+        distance = int.from_bytes(bytes(list(read)), byteorder="little", signed=False)
+        return min(distance, self.MAX_DISTANCE_MM)
 
+    @staticmethod
+    def _require_pixel(index: int):
+        if index not in {0, 1}:
+            raise ValueError("index must be 0 or 1")

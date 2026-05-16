@@ -1,57 +1,71 @@
-from arduino_io import ArduinoIO
-from motor import Motor
-from encoder import Encoder
-from sonar import Sonar
-from gps import GPS
 import time
 
+from arduino_io import ArduinoIO
+from chassis import Chassis
+from config import (
+    ARDUINO_PORT,
+    LEFT_MOTOR,
+    MAX_FORWARD_CM_PER_SEC,
+    MAX_TURN_DEG_PER_SEC,
+    MOTOR_TUNING,
+    RIGHT_MOTOR,
+    TRACK_WIDTH_CM,
+    WHEEL_DIAMETER_CM,
+)
+from controller import Controller
+from encoder import Encoder
+from motor import Motor
 
-# arduino = ArduinoIO(port="/dev/ttyUSB0", baudrate=115200)
 
-# motor1 = Motor(arduino, 9, 8)
-# motor2 = Motor(arduino, 10, 7)
-#
-# encoder1 = Encoder(arduino, 1)
-# encoder2 = Encoder(arduino, 2)
+CONTROL_INTERVAL_SEC = 0.05
 
-sonar = Sonar()
 
-sonar.set_rgb_mode(0)
-sonar.set_color(0, 0x000000)
-sonar.set_color(1, 0x000000)
+def create_motor(arduino: ArduinoIO, motor_config: dict) -> Motor:
+    return Motor(
+        arduino,
+        motor_config["pwm_pin"],
+        motor_config["dir_pin"],
+        Encoder(arduino, motor_config["encoder_index"]),
+        inverted=motor_config.get("inverted", False),
+        encoder_reversed=motor_config.get("encoder_reversed", True),
+        **MOTOR_TUNING,
+    )
 
-gps = GPS()
 
-print("Starting program in 5 seconds...")
+def controller_velocity(controller: Controller):
+    forward = -controller.get_axis("left_y") * MAX_FORWARD_CM_PER_SEC
+    turn = -controller.get_axis("right_x") * MAX_TURN_DEG_PER_SEC
+    return forward, turn
 
-time.sleep(5)
 
-try:
-    while True:
-        # print(f"Motor1 Encoder: {encoder1.read() * (360 / 268.8)} degrees")
-        # print(f"Motor2 Encoder: {encoder2.read() * (360 / 268.8)} degrees")
-        dist = sonar.get_distance()
-        print(dist)
+def main():
+    controller = Controller()
 
-        # if dist < 100:
-        #     motor1.set_speed(0.1)
-        #     motor2.set_speed(0.1)
-        # else:
-        #     motor1.stop()
-        #     motor2.stop()
+    with ArduinoIO(port=ARDUINO_PORT) as arduino:
+        chassis = Chassis(
+            WHEEL_DIAMETER_CM,
+            TRACK_WIDTH_CM,
+            create_motor(arduino, LEFT_MOTOR),
+            create_motor(arduino, RIGHT_MOTOR),
+        )
 
-        gps.update()
-        data = gps.get_data()
-        print(data)
-        print()
+        try:
+            while True:
+                if controller.update():
+                    forward, turn = controller_velocity(controller)
+                    print(chassis.left_motor.get_velocity())
+                    chassis.set_velocity(forward, turn)
+                else:
+                    chassis.stop()
 
-        # motor1.set_speed(0.5)
-        # motor2.set_speed(0.5)
-        # time.sleep(0.1)
+                time.sleep(CONTROL_INTERVAL_SEC)
 
-except KeyboardInterrupt:
-    print("hi")
-    # motor1.stop()
-    # motor2.stop()
-    # arduino.close()
+        except KeyboardInterrupt:
+            print()
 
+        finally:
+            chassis.stop()
+
+
+if __name__ == "__main__":
+    main()
