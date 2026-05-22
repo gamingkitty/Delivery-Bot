@@ -1,5 +1,4 @@
 from drive.chassis import Chassis
-from drive.encoder import Encoder
 from drive.motor import Motor
 from hardware.arduino_io import ArduinoIO
 from hardware.gps import GPS
@@ -24,7 +23,7 @@ def create_motor(arduino: ArduinoIO, motor_config: dict) -> Motor:
         arduino,
         motor_config["pwm_pin"],
         motor_config["dir_pin"],
-        Encoder(arduino, motor_config["encoder_index"]),
+        motor_config["encoder_index"],
         inverted=motor_config.get("inverted", False),
         encoder_reversed=motor_config.get("encoder_reversed", True),
         **MOTOR_TUNING,

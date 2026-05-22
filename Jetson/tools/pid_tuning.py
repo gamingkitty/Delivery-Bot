@@ -8,7 +8,6 @@ if str(JETSON_ROOT) not in sys.path:
     sys.path.insert(0, str(JETSON_ROOT))
 
 from config import ARDUINO_PORT, MOTOR_TUNING, RIGHT_MOTOR
-from drive.encoder import Encoder
 from drive.motor import Motor
 from hardware.arduino_io import ArduinoIO
 
@@ -44,7 +43,7 @@ def create_tuning_motor(arduino: ArduinoIO) -> Motor:
         arduino,
         RIGHT_MOTOR["pwm_pin"],
         RIGHT_MOTOR["dir_pin"],
-        Encoder(arduino, RIGHT_MOTOR["encoder_index"]),
+        RIGHT_MOTOR["encoder_index"],
         encoder_reversed=RIGHT_MOTOR.get("encoder_reversed", True),
         **MOTOR_TUNING,
     )

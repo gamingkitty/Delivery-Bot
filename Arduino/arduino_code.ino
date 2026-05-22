@@ -3,14 +3,13 @@
 
   Commands:
     ENCREAD <encoder>
-    ENCRESET <encoder>
     IMUANGLE
     PING
     MOTCFG <motor> <pwm_pin> <dir_pin> <encoder>
            <motor_inverted> <encoder_reversed> <counts_per_rev>
            <kp> <ki> <kd> <static_pwm> <pwm_per_deg_per_sec>
-    MOTPWR <motor> <-1.0..1.0>
     MOTVEL <motor> <deg_per_sec>
+    MOTVEL2 <motor_a> <deg_per_sec_a> <motor_b> <deg_per_sec_b>
     MOTVELREAD <motor>
 
   Responses:
@@ -88,11 +87,11 @@ float clampFloat(float value, float low, float high);
 float stepToward(float current, float target, float maxStep);
 float zeroFloor(float value);
 long readEncoderCount(uint8_t encoderIndex);
-void resetEncoderCount(uint8_t encoderIndex);
 bool readArgs(char *args[], uint8_t count);
 bool validEncoder(uint8_t encoderIndex);
 bool getEncoderArg(uint8_t &encoderIndex);
 bool getMotorArg(uint8_t &motorIndex);
+bool getVelocityArg(float &velocity);
 bool setupIMU();
 bool setupIMUAtAddress(uint8_t address);
 bool imuWrite8(uint8_t reg, uint8_t value);
@@ -100,17 +99,17 @@ bool imuRead8(uint8_t reg, uint8_t &value);
 bool imuReadLen(uint8_t reg, uint8_t *values, uint8_t length);
 bool readIMUAngle(float &angleDeg);
 void resetControllerState(MotorController &motor);
+void resetControllerStateAt(MotorController &motor, unsigned long now);
 void stopMotor(MotorController &motor);
-void syncMotorsForEncoder(uint8_t encoderIndex);
+void setMotorVelocity(MotorController &motor, float velocity, unsigned long resetTime);
 void readSerial();
 void handleCommand(char *line);
 void handleEncoderRead();
-void handleEncoderReset();
 void handleIMUAngle();
 void handlePing();
 void handleMotorConfig();
-void handleMotorPower();
 void handleMotorVelocity();
+void handleMotorVelocityPair();
 void handleMotorVelocityRead();
 float readMotorVelocity(MotorController &motor);
 bool updateVelocityEstimate(MotorController &motor);
@@ -148,12 +147,6 @@ long readEncoderCount(uint8_t encoderIndex) {
   long value = encoderCounts[encoderIndex - 1];
   interrupts();
   return value;
-}
-
-void resetEncoderCount(uint8_t encoderIndex) {
-  noInterrupts();
-  encoderCounts[encoderIndex - 1] = 0;
-  interrupts();
 }
 
 bool readArgs(char *args[], uint8_t count) {
@@ -207,6 +200,18 @@ bool getMotorArg(uint8_t &motorIndex) {
   }
 
   motorIndex--;
+  return true;
+}
+
+bool getVelocityArg(float &velocity) {
+  char *arg = strtok(NULL, " ");
+
+  if (arg == NULL) {
+    Serial.println("ERR missing_velocity");
+    return false;
+  }
+
+  velocity = atof(arg);
   return true;
 }
 
@@ -302,13 +307,17 @@ bool readIMUAngle(float &angleDeg) {
 }
 
 void resetControllerState(MotorController &motor) {
+  resetControllerStateAt(motor, micros());
+}
+
+void resetControllerStateAt(MotorController &motor, unsigned long now) {
   motor.integral = 0.0;
   motor.previousError = 0.0;
   motor.lastDtSec = 0.0;
   motor.measuredDegPerSec = 0.0;
   motor.filterReady = false;
   motor.lastCount = readEncoderCount(motor.encoderIndex);
-  motor.lastMicros = micros();
+  motor.lastMicros = now;
 }
 
 void stopMotor(MotorController &motor) {
@@ -321,10 +330,17 @@ void stopMotor(MotorController &motor) {
   analogWrite(motor.pwmPin, 0);
 }
 
-void syncMotorsForEncoder(uint8_t encoderIndex) {
-  for (uint8_t i = 0; i < MOTOR_COUNT; i++) {
-    if (motors[i].configured && motors[i].encoderIndex == encoderIndex) {
-      resetControllerState(motors[i]);
+void setMotorVelocity(MotorController &motor, float velocity, unsigned long resetTime) {
+  if (velocity == 0.0) {
+    stopMotor(motor);
+  } else {
+    bool wasEnabled = motor.enabled;
+    motor.targetDegPerSec = velocity;
+    motor.enabled = true;
+
+    if (!wasEnabled) {
+      motor.setpointDegPerSec = 0.0;
+      resetControllerStateAt(motor, resetTime);
     }
   }
 }
@@ -384,18 +400,16 @@ void handleCommand(char *line) {
     Serial.println("ERR empty_command");
   } else if (strcmp(command, "ENCREAD") == 0) {
     handleEncoderRead();
-  } else if (strcmp(command, "ENCRESET") == 0) {
-    handleEncoderReset();
   } else if (strcmp(command, "IMUANGLE") == 0) {
     handleIMUAngle();
   } else if (strcmp(command, "PING") == 0) {
     handlePing();
   } else if (strcmp(command, "MOTCFG") == 0) {
     handleMotorConfig();
-  } else if (strcmp(command, "MOTPWR") == 0) {
-    handleMotorPower();
   } else if (strcmp(command, "MOTVEL") == 0) {
     handleMotorVelocity();
+  } else if (strcmp(command, "MOTVEL2") == 0) {
+    handleMotorVelocityPair();
   } else if (strcmp(command, "MOTVELREAD") == 0) {
     handleMotorVelocityRead();
   } else {
@@ -410,16 +424,6 @@ void handleEncoderRead() {
 
   Serial.print("VALUE ");
   Serial.println(readEncoderCount(encoderIndex));
-}
-
-void handleEncoderReset() {
-  uint8_t encoderIndex;
-
-  if (!getEncoderArg(encoderIndex)) return;
-
-  resetEncoderCount(encoderIndex);
-  syncMotorsForEncoder(encoderIndex);
-  Serial.println("OK");
 }
 
 void handleIMUAngle() {
@@ -502,10 +506,12 @@ void handleMotorConfig() {
   Serial.println("OK");
 }
 
-void handleMotorPower() {
+void handleMotorVelocity() {
   uint8_t motorIndex;
+  float velocity;
 
   if (!getMotorArg(motorIndex)) return;
+  if (!getVelocityArg(velocity)) return;
 
   MotorController &motor = motors[motorIndex];
 
@@ -514,55 +520,38 @@ void handleMotorPower() {
     return;
   }
 
-  char *powerArg = strtok(NULL, " ");
-
-  if (powerArg == NULL) {
-    Serial.println("ERR missing_power");
-    return;
-  }
-
-  motor.enabled = false;
-  motor.targetDegPerSec = 0.0;
-  motor.setpointDegPerSec = 0.0;
-  motor.integral = 0.0;
-  motor.previousError = 0.0;
-  applyMotorPower(motor, clampFloat(atof(powerArg), -1.0, 1.0) * 255.0);
+  setMotorVelocity(motor, velocity, micros());
   Serial.println("OK");
 }
 
-void handleMotorVelocity() {
-  uint8_t motorIndex;
+void handleMotorVelocityPair() {
+  uint8_t firstMotorIndex;
+  uint8_t secondMotorIndex;
+  float firstVelocity;
+  float secondVelocity;
 
-  if (!getMotorArg(motorIndex)) return;
+  if (!getMotorArg(firstMotorIndex)) return;
+  if (!getVelocityArg(firstVelocity)) return;
+  if (!getMotorArg(secondMotorIndex)) return;
+  if (!getVelocityArg(secondVelocity)) return;
 
-  MotorController &motor = motors[motorIndex];
+  if (firstMotorIndex == secondMotorIndex) {
+    Serial.println("ERR duplicate_motor");
+    return;
+  }
 
-  if (!motor.configured) {
+  MotorController &firstMotor = motors[firstMotorIndex];
+  MotorController &secondMotor = motors[secondMotorIndex];
+
+  if (!firstMotor.configured || !secondMotor.configured) {
     Serial.println("ERR motor_not_configured");
     return;
   }
 
-  char *velocityArg = strtok(NULL, " ");
+  unsigned long resetTime = micros();
 
-  if (velocityArg == NULL) {
-    Serial.println("ERR missing_velocity");
-    return;
-  }
-
-  float velocity = atof(velocityArg);
-
-  if (velocity == 0.0) {
-    stopMotor(motor);
-  } else {
-    bool wasEnabled = motor.enabled;
-    motor.targetDegPerSec = velocity;
-    motor.enabled = true;
-
-    if (!wasEnabled) {
-      motor.setpointDegPerSec = 0.0;
-      resetControllerState(motor);
-    }
-  }
+  setMotorVelocity(firstMotor, firstVelocity, resetTime);
+  setMotorVelocity(secondMotor, secondVelocity, resetTime);
 
   Serial.println("OK");
 }

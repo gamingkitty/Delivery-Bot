@@ -146,10 +146,6 @@ class ArduinoIO:
         encoder_index = _require_valid_index("encoder_index", encoder_index)
         return self._send_command(f"ENCREAD {encoder_index}", int)
 
-    def encoder_reset(self, encoder_index: int):
-        encoder_index = _require_valid_index("encoder_index", encoder_index)
-        self._send_command(f"ENCRESET {encoder_index}")
-
     def motor_config(
         self,
         motor_index: int,
@@ -192,10 +188,26 @@ class ArduinoIO:
         motor_index = _require_valid_index("motor_index", motor_index)
         self._send_command(f"MOTVEL {motor_index} {float(deg_per_sec):g}")
 
-    def motor_power(self, motor_index: int, power: float):
-        motor_index = _require_valid_index("motor_index", motor_index)
-        power = _clamp(float(power), -1.0, 1.0)
-        self._send_command(f"MOTPWR {motor_index} {power:g}")
+    def motor_velocity_pair(
+        self,
+        first_motor_index: int,
+        first_deg_per_sec: float,
+        second_motor_index: int,
+        second_deg_per_sec: float,
+    ):
+        first_motor_index = _require_valid_index("first_motor_index", first_motor_index)
+        second_motor_index = _require_valid_index(
+            "second_motor_index", second_motor_index
+        )
+
+        if first_motor_index == second_motor_index:
+            raise ValueError("motor indexes must be different")
+
+        self._send_command(
+            "MOTVEL2 "
+            f"{first_motor_index} {float(first_deg_per_sec):g} "
+            f"{second_motor_index} {float(second_deg_per_sec):g}"
+        )
 
     def motor_velocity_read(self, motor_index: int) -> float:
         motor_index = _require_valid_index("motor_index", motor_index)

@@ -9,7 +9,7 @@ if str(JETSON_ROOT) not in sys.path:
 
 from config import ARDUINO_PORT
 from hardware.arduino_io import ArduinoIO
-from mapping.point_cloud import PointCloudMap
+from navigation.point_cloud import PointCloudMap
 from robot import CONTROL_INTERVAL_SEC, controller_velocity, create_chassis
 from teleop.controller import Controller
 

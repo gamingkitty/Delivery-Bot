@@ -174,12 +174,3 @@ class Controller:
         down  = (0, -1)
         """
         return self.hat
-
-    def print_state(self):
-        pressed = [name for name, value in self.buttons.items() if value]
-        print(
-            "connected:", self.connected,
-            "axes:", {k: round(v, 2) for k, v in self.axes.items()},
-            "hat:", self.hat,
-            "pressed:", pressed,
-        )

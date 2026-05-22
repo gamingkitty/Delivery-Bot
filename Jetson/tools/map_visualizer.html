@@ -1,0 +1,1706 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Delivery Bot Map Visualizer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101215;
+      --panel: #181c20;
+      --panel-2: #20262b;
+      --border: #343c44;
+      --text: #eef3f6;
+      --muted: #9ba8b2;
+      --accent: #49b879;
+      --accent-2: #54a1d8;
+      --danger: #ec6a5e;
+      --warn: #dca94a;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, Segoe UI, Roboto, Arial, sans-serif;
+      font-size: 14px;
+    }
+
+    body {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+    }
+
+    aside {
+      min-width: 0;
+      border-right: 1px solid var(--border);
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    main {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      background: #0d1013;
+    }
+
+    header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .panel-scroll {
+      overflow: auto;
+      padding: 14px;
+    }
+
+    .group {
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .group:first-child {
+      padding-top: 0;
+    }
+
+    .group:last-child {
+      border-bottom: 0;
+    }
+
+    .group-title {
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    input[type="file"],
+    input[type="number"] {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 8px 9px;
+      font: inherit;
+    }
+
+    input[type="file"] {
+      padding: 7px;
+      font-size: 12px;
+    }
+
+    input[type="checkbox"] {
+      accent-color: var(--accent);
+    }
+
+    .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .toggles {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 12px;
+    }
+
+    .toggle-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .button-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    button {
+      min-height: 34px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--panel-2);
+      color: var(--text);
+      font: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:hover {
+      border-color: #52606b;
+      background: #293139;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
+    button.active {
+      border-color: var(--accent-2);
+      background: #173247;
+      color: #dff3ff;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .stat {
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #14181c;
+      padding: 9px;
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .stat-value {
+      margin-top: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .status {
+      min-height: 38px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #14181c;
+      padding: 9px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    .status.good {
+      border-color: rgba(73, 184, 121, 0.55);
+      color: #b8f2d0;
+    }
+
+    .status.warn {
+      border-color: rgba(220, 169, 74, 0.55);
+      color: #f4d79b;
+    }
+
+    .status.bad {
+      border-color: rgba(236, 106, 94, 0.55);
+      color: #f1b6af;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      cursor: grab;
+    }
+
+    canvas.dragging {
+      cursor: grabbing;
+    }
+
+    .hud {
+      position: absolute;
+      left: 12px;
+      bottom: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .hud-item {
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      background: rgba(13, 16, 19, 0.78);
+      padding: 7px 9px;
+      color: #dce5ea;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      backdrop-filter: blur(6px);
+    }
+
+    .legend {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      width: min(260px, calc(100% - 24px));
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 6px;
+      background: rgba(13, 16, 19, 0.78);
+      padding: 9px;
+      pointer-events: none;
+      backdrop-filter: blur(6px);
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 5px 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .swatch {
+      width: 18px;
+      height: 5px;
+      border-radius: 999px;
+      background: var(--muted);
+    }
+
+    .swatch.points {
+      background: #e8f1f2;
+    }
+
+    .swatch.path {
+      background: var(--accent-2);
+    }
+
+    .swatch.start {
+      background: var(--accent);
+    }
+
+    .swatch.goal {
+      background: var(--danger);
+    }
+
+    @media (max-width: 860px) {
+      body {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+      }
+
+      aside {
+        max-height: 42vh;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      header {
+        padding: 12px 14px;
+      }
+
+      .panel-scroll {
+        padding: 12px 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <aside>
+    <header>
+      <h1>Map Visualizer</h1>
+      <div class="subtitle">Load a pointcloud JSON, set start and goal, then inspect the generated Theta* path.</div>
+    </header>
+    <div class="panel-scroll">
+      <section class="group">
+        <div class="group-title">Map</div>
+        <label for="mapFile">Point map JSON</label>
+        <input id="mapFile" type="file" accept=".json,application/json">
+      </section>
+
+      <section class="group">
+        <div class="group-title">Planner</div>
+        <div class="field-grid">
+          <label>
+            Max dist m
+            <input id="maxDistance" type="number" min="0.01" step="0.05" value="1.0">
+          </label>
+          <label>
+            Grid m
+            <input id="resolution" type="number" min="0.02" step="0.02" value="0.2">
+          </label>
+          <label>
+            Clearance
+            <input id="clearanceWeight" type="number" min="0" step="0.1" value="1.5">
+          </label>
+          <label>
+            Snap m
+            <input id="snapDistance" type="number" min="0" step="0.05" value="1.0">
+          </label>
+        </div>
+      </section>
+
+      <section class="group">
+        <div class="group-title">Mouse</div>
+        <div class="button-row">
+          <button id="modePan" class="active" type="button" title="Pan mode">Pan</button>
+          <button id="modeStart" type="button" title="Set start point">Start</button>
+          <button id="modeGoal" type="button" title="Set goal point">Goal</button>
+          <button id="fitView" type="button" title="Fit map to view">Fit</button>
+        </div>
+        <div class="button-row" style="margin-top: 8px;">
+          <button id="clearPath" type="button" title="Clear start, goal, and path">Clear</button>
+          <button id="exportPath" type="button" title="Export current path JSON" disabled>Save</button>
+          <button id="zoomIn" type="button" title="Zoom in">+</button>
+          <button id="zoomOut" type="button" title="Zoom out">-</button>
+        </div>
+      </section>
+
+      <section class="group">
+        <div class="group-title">Layers</div>
+        <div class="toggles">
+          <label class="toggle-row"><input id="showGrid" type="checkbox" checked> Grid</label>
+          <label class="toggle-row"><input id="showPoints" type="checkbox" checked> Points</label>
+          <label class="toggle-row"><input id="showPath" type="checkbox" checked> Path</label>
+          <label class="toggle-row"><input id="showLabels" type="checkbox" checked> Labels</label>
+        </div>
+      </section>
+
+      <section class="group">
+        <div class="group-title">Stats</div>
+        <div class="stats">
+          <div class="stat">
+            <div class="stat-label">Points</div>
+            <div id="pointCount" class="stat-value">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Cells</div>
+            <div id="cellCount" class="stat-value">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Waypoints</div>
+            <div id="pathCount" class="stat-value">0</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Length</div>
+            <div id="pathLength" class="stat-value">0.00 m</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="group">
+        <div class="group-title">Status</div>
+        <div id="status" class="status">Open a recorded point map to begin.</div>
+      </section>
+    </div>
+  </aside>
+
+  <main>
+    <canvas id="mapCanvas"></canvas>
+    <div class="hud">
+      <div id="cursorReadout" class="hud-item">x 0.00, y 0.00</div>
+      <div id="zoomReadout" class="hud-item">1 px/m</div>
+    </div>
+    <div class="legend">
+      <div class="legend-row"><span class="swatch points"></span> recorded map points</div>
+      <div class="legend-row"><span class="swatch path"></span> planned path</div>
+      <div class="legend-row"><span class="swatch start"></span> start</div>
+      <div class="legend-row"><span class="swatch goal"></span> goal</div>
+    </div>
+  </main>
+
+  <script>
+    "use strict";
+
+    const MAX_GRID_CELLS = 2000000;
+    const MIN_SCALE = 8;
+    const MAX_SCALE = 1200;
+
+    const canvas = document.getElementById("mapCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const controls = {
+      mapFile: document.getElementById("mapFile"),
+      maxDistance: document.getElementById("maxDistance"),
+      resolution: document.getElementById("resolution"),
+      clearanceWeight: document.getElementById("clearanceWeight"),
+      snapDistance: document.getElementById("snapDistance"),
+      modePan: document.getElementById("modePan"),
+      modeStart: document.getElementById("modeStart"),
+      modeGoal: document.getElementById("modeGoal"),
+      fitView: document.getElementById("fitView"),
+      clearPath: document.getElementById("clearPath"),
+      exportPath: document.getElementById("exportPath"),
+      zoomIn: document.getElementById("zoomIn"),
+      zoomOut: document.getElementById("zoomOut"),
+      showGrid: document.getElementById("showGrid"),
+      showPoints: document.getElementById("showPoints"),
+      showPath: document.getElementById("showPath"),
+      showLabels: document.getElementById("showLabels"),
+      pointCount: document.getElementById("pointCount"),
+      cellCount: document.getElementById("cellCount"),
+      pathCount: document.getElementById("pathCount"),
+      pathLength: document.getElementById("pathLength"),
+      status: document.getElementById("status"),
+      cursorReadout: document.getElementById("cursorReadout"),
+      zoomReadout: document.getElementById("zoomReadout")
+    };
+
+    const state = {
+      points: [],
+      grid: null,
+      path: [],
+      start: null,
+      goal: null,
+      mode: "pan",
+      scale: 80,
+      offsetX: 0,
+      offsetY: 0,
+      pointer: {
+        active: false,
+        id: null,
+        startX: 0,
+        startY: 0,
+        lastX: 0,
+        lastY: 0,
+        moved: false
+      },
+      needsFit: true
+    };
+
+    class PlannerError extends Error {}
+    class EndpointError extends PlannerError {}
+    class NoPathError extends PlannerError {}
+
+    class MinHeap {
+      constructor() {
+        this.items = [];
+      }
+
+      push(item) {
+        this.items.push(item);
+        this.bubbleUp(this.items.length - 1);
+      }
+
+      pop() {
+        if (this.items.length === 0) {
+          return null;
+        }
+
+        const root = this.items[0];
+        const last = this.items.pop();
+
+        if (this.items.length > 0) {
+          this.items[0] = last;
+          this.bubbleDown(0);
+        }
+
+        return root;
+      }
+
+      get length() {
+        return this.items.length;
+      }
+
+      bubbleUp(index) {
+        while (index > 0) {
+          const parent = Math.floor((index - 1) / 2);
+
+          if (this.items[parent][0] <= this.items[index][0]) {
+            break;
+          }
+
+          [this.items[parent], this.items[index]] = [this.items[index], this.items[parent]];
+          index = parent;
+        }
+      }
+
+      bubbleDown(index) {
+        while (true) {
+          const left = index * 2 + 1;
+          const right = left + 1;
+          let smallest = index;
+
+          if (left < this.items.length && this.items[left][0] < this.items[smallest][0]) {
+            smallest = left;
+          }
+
+          if (right < this.items.length && this.items[right][0] < this.items[smallest][0]) {
+            smallest = right;
+          }
+
+          if (smallest === index) {
+            break;
+          }
+
+          [this.items[smallest], this.items[index]] = [this.items[index], this.items[smallest]];
+          index = smallest;
+        }
+      }
+    }
+
+    class SpatialIndex {
+      constructor(points, bucketSize) {
+        this.bucketSize = Math.max(Number(bucketSize), 1e-9);
+        this.buckets = new Map();
+
+        for (const point of points) {
+          const key = this.key(point.x, point.y);
+          const bucket = this.buckets.get(key);
+
+          if (bucket) {
+            bucket.push(point);
+          } else {
+            this.buckets.set(key, [point]);
+          }
+        }
+      }
+
+      key(x, y) {
+        return `${Math.floor(Number(x) / this.bucketSize)},${Math.floor(Number(y) / this.bucketSize)}`;
+      }
+
+      nearestWithin(x, y, radius) {
+        radius = Number(radius);
+        if (radius < 0) {
+          return null;
+        }
+
+        const bucketX = Math.floor(Number(x) / this.bucketSize);
+        const bucketY = Math.floor(Number(y) / this.bucketSize);
+        const bucketRadius = Math.ceil(radius / this.bucketSize) + 1;
+        let bestDistanceSq = radius * radius;
+        let bestPoint = null;
+
+        for (let by = bucketY - bucketRadius; by <= bucketY + bucketRadius; by += 1) {
+          for (let bx = bucketX - bucketRadius; bx <= bucketX + bucketRadius; bx += 1) {
+            const bucket = this.buckets.get(`${bx},${by}`);
+
+            if (!bucket) {
+              continue;
+            }
+
+            for (const point of bucket) {
+              const distanceSq = (Number(x) - point.x) ** 2 + (Number(y) - point.y) ** 2;
+
+              if (distanceSq <= bestDistanceSq + 1e-12) {
+                bestDistanceSq = distanceSq;
+                bestPoint = point;
+              }
+            }
+          }
+        }
+
+        if (!bestPoint) {
+          return null;
+        }
+
+        return {
+          distance: Math.sqrt(bestDistanceSq),
+          point: bestPoint
+        };
+      }
+    }
+
+    class NavigationGrid {
+      constructor(originX, originY, resolution, driveable, clearance) {
+        this.originX = originX;
+        this.originY = originY;
+        this.resolution = resolution;
+        this.driveable = driveable;
+        this.clearance = clearance;
+        this.rows = driveable.length;
+        this.cols = this.rows > 0 ? driveable[0].length : 0;
+        this.driveablePoints = this.buildDriveablePoints();
+        this.driveableIndex = new SpatialIndex(this.driveablePoints, this.resolution);
+      }
+
+      buildDriveablePoints() {
+        const points = [];
+
+        for (let row = 0; row < this.rows; row += 1) {
+          for (let col = 0; col < this.cols; col += 1) {
+            if (this.driveable[row][col]) {
+              const world = this.cellToWorld(row, col);
+              points.push({
+                x: world.x,
+                y: world.y,
+                row,
+                col
+              });
+            }
+          }
+        }
+
+        return points;
+      }
+
+      inBounds(row, col) {
+        return row >= 0 && row < this.rows && col >= 0 && col < this.cols;
+      }
+
+      isDriveable(row, col) {
+        return this.inBounds(row, col) && this.driveable[row][col];
+      }
+
+      clearanceAt(row, col) {
+        return this.clearance[row][col];
+      }
+
+      cellToWorld(row, col) {
+        return {
+          x: this.originX + col * this.resolution,
+          y: this.originY + row * this.resolution
+        };
+      }
+
+      worldToCell(x, y) {
+        return {
+          row: Math.floor((Number(y) - this.originY) / this.resolution + 0.5),
+          col: Math.floor((Number(x) - this.originX) / this.resolution + 0.5)
+        };
+      }
+
+      nearestDriveableCell(x, y, maxDistance) {
+        const result = this.driveableIndex.nearestWithin(x, y, maxDistance);
+        if (!result) {
+          return null;
+        }
+
+        return {
+          row: result.point.row,
+          col: result.point.col
+        };
+      }
+
+      neighbors(cell) {
+        const out = [];
+
+        for (let dRow = -1; dRow <= 1; dRow += 1) {
+          for (let dCol = -1; dCol <= 1; dCol += 1) {
+            if (dRow === 0 && dCol === 0) {
+              continue;
+            }
+
+            const row = cell.row + dRow;
+            const col = cell.col + dCol;
+
+            if (dRow !== 0 && dCol !== 0) {
+              if (!this.isDriveable(cell.row + dRow, cell.col)) {
+                continue;
+              }
+
+              if (!this.isDriveable(cell.row, cell.col + dCol)) {
+                continue;
+              }
+            }
+
+            if (this.isDriveable(row, col)) {
+              out.push({ row, col });
+            }
+          }
+        }
+
+        return out;
+      }
+    }
+
+    function parseMapJson(json) {
+      const rawPoints = Array.isArray(json) ? json : json.points;
+
+      if (!Array.isArray(rawPoints)) {
+        throw new PlannerError("Map JSON must contain a points array.");
+      }
+
+      const points = [];
+
+      for (const point of rawPoints) {
+        let x;
+        let y;
+
+        if (Array.isArray(point)) {
+          x = Number(point[0]);
+          y = Number(point[1]);
+        } else if (point && typeof point === "object") {
+          x = Number(point.x);
+          y = Number(point.y);
+        }
+
+        if (Number.isFinite(x) && Number.isFinite(y)) {
+          points.push({ x, y });
+        }
+      }
+
+      if (points.length === 0) {
+        throw new PlannerError("Map has no valid x/y points.");
+      }
+
+      return points;
+    }
+
+    function plannerSettings() {
+      const maxDistance = positiveNumber(controls.maxDistance.value, 1.0);
+      const resolution = positiveNumber(controls.resolution.value, 0.2);
+      const clearanceWeight = Math.max(0, numberOrDefault(controls.clearanceWeight.value, 1.5));
+      const snapDistance = Math.min(
+        Math.max(0, numberOrDefault(controls.snapDistance.value, maxDistance)),
+        maxDistance
+      );
+
+      return {
+        maxDistance,
+        resolution,
+        clearanceWeight,
+        snapDistance
+      };
+    }
+
+    function positiveNumber(value, fallback) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    }
+
+    function numberOrDefault(value, fallback) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : fallback;
+    }
+
+    function buildNavigationGrid(points, settings, start, goal) {
+      const boundsPoints = points.slice();
+
+      if (start) {
+        boundsPoints.push(start);
+      }
+
+      if (goal) {
+        boundsPoints.push(goal);
+      }
+
+      const padding = settings.maxDistance + settings.resolution;
+      const minX = Math.min(...boundsPoints.map((p) => p.x)) - padding;
+      const maxX = Math.max(...boundsPoints.map((p) => p.x)) + padding;
+      const minY = Math.min(...boundsPoints.map((p) => p.y)) - padding;
+      const maxY = Math.max(...boundsPoints.map((p) => p.y)) + padding;
+      const originX = Math.floor(minX / settings.resolution) * settings.resolution;
+      const originY = Math.floor(minY / settings.resolution) * settings.resolution;
+      const endX = Math.ceil(maxX / settings.resolution) * settings.resolution;
+      const endY = Math.ceil(maxY / settings.resolution) * settings.resolution;
+      const cols = Math.round((endX - originX) / settings.resolution) + 1;
+      const rows = Math.round((endY - originY) / settings.resolution) + 1;
+
+      if (rows * cols > MAX_GRID_CELLS) {
+        throw new PlannerError(`Navigation grid is too large: ${rows} x ${cols} cells.`);
+      }
+
+      const mapIndex = new SpatialIndex(points, Math.max(settings.maxDistance, settings.resolution));
+      const driveable = [];
+
+      for (let row = 0; row < rows; row += 1) {
+        const driveableRow = [];
+        const y = originY + row * settings.resolution;
+
+        for (let col = 0; col < cols; col += 1) {
+          const x = originX + col * settings.resolution;
+          driveableRow.push(Boolean(mapIndex.nearestWithin(x, y, settings.maxDistance)));
+        }
+
+        driveable.push(driveableRow);
+      }
+
+      return new NavigationGrid(
+        originX,
+        originY,
+        settings.resolution,
+        driveable,
+        computeClearance(driveable, settings.resolution)
+      );
+    }
+
+    function computeClearance(driveable, resolution) {
+      const rows = driveable.length;
+      const cols = rows > 0 ? driveable[0].length : 0;
+
+      if (rows === 0 || cols === 0) {
+        return [];
+      }
+
+      const featureGrid = [];
+      for (let row = 0; row < rows; row += 1) {
+        const values = [];
+
+        for (let col = 0; col < cols; col += 1) {
+          values.push(driveable[row][col] ? Infinity : 0);
+        }
+
+        featureGrid.push(values);
+      }
+
+      const rowDistances = featureGrid.map(distanceTransform1d);
+      const clearance = Array.from({ length: rows }, () => Array(cols).fill(Infinity));
+
+      for (let col = 0; col < cols; col += 1) {
+        const columnInput = [];
+
+        for (let row = 0; row < rows; row += 1) {
+          columnInput.push(rowDistances[row][col]);
+        }
+
+        const columnDistances = distanceTransform1d(columnInput);
+
+        for (let row = 0; row < rows; row += 1) {
+          clearance[row][col] = Math.sqrt(columnDistances[row]) * resolution;
+        }
+      }
+
+      return clearance;
+    }
+
+    function distanceTransform1d(values) {
+      const count = values.length;
+      const finite = [];
+
+      for (let index = 0; index < count; index += 1) {
+        if (Number.isFinite(values[index])) {
+          finite.push(index);
+        }
+      }
+
+      if (finite.length === 0) {
+        return Array(count).fill(Infinity);
+      }
+
+      const envelope = Array(finite.length).fill(0);
+      const boundaries = Array(finite.length + 1).fill(0);
+      let envelopeIndex = 0;
+      envelope[0] = finite[0];
+      boundaries[0] = -Infinity;
+      boundaries[1] = Infinity;
+
+      for (const q of finite.slice(1)) {
+        let separator;
+
+        while (true) {
+          const previous = envelope[envelopeIndex];
+          separator = ((values[q] + q * q) - (values[previous] + previous * previous)) /
+            (2 * q - 2 * previous);
+
+          if (separator > boundaries[envelopeIndex]) {
+            break;
+          }
+
+          envelopeIndex -= 1;
+        }
+
+        envelopeIndex += 1;
+        envelope[envelopeIndex] = q;
+        boundaries[envelopeIndex] = separator;
+        boundaries[envelopeIndex + 1] = Infinity;
+      }
+
+      const distances = Array(count).fill(0);
+      envelopeIndex = 0;
+
+      for (let q = 0; q < count; q += 1) {
+        while (boundaries[envelopeIndex + 1] < q) {
+          envelopeIndex += 1;
+        }
+
+        const nearest = envelope[envelopeIndex];
+        distances[q] = (q - nearest) ** 2 + values[nearest];
+      }
+
+      return distances;
+    }
+
+    function planPath(points, start, goal, settings) {
+      const grid = buildNavigationGrid(points, settings, start, goal);
+      const startCell = resolveEndpoint(grid, start, settings.snapDistance, "Start");
+      const goalCell = resolveEndpoint(grid, goal, settings.snapDistance, "Goal");
+      const cells = thetaStar(grid, startCell, goalCell, settings);
+
+      return {
+        grid,
+        waypoints: cells.map((cell) => {
+          const world = grid.cellToWorld(cell.row, cell.col);
+          return {
+            x: round(world.x, 3),
+            y: round(world.y, 3)
+          };
+        })
+      };
+    }
+
+    function resolveEndpoint(grid, point, snapDistance, label) {
+      const cell = grid.worldToCell(point.x, point.y);
+
+      if (grid.isDriveable(cell.row, cell.col)) {
+        return cell;
+      }
+
+      const snapped = grid.nearestDriveableCell(point.x, point.y, snapDistance);
+
+      if (snapped) {
+        return snapped;
+      }
+
+      throw new EndpointError(`${label} is not within ${snapDistance.toFixed(2)} m of driveable map space.`);
+    }
+
+    function thetaStar(grid, start, goal, settings) {
+      if (sameCell(start, goal)) {
+        return [start];
+      }
+
+      const open = new MinHeap();
+      const gScore = new Map();
+      const parent = new Map();
+      const closed = new Set();
+      let counter = 0;
+      const startKey = cellKey(start);
+
+      gScore.set(startKey, 0);
+      parent.set(startKey, start);
+      open.push([heuristic(grid, start, goal), counter, start]);
+
+      while (open.length > 0) {
+        const current = open.pop()[2];
+        const currentKey = cellKey(current);
+
+        if (closed.has(currentKey)) {
+          continue;
+        }
+
+        if (sameCell(current, goal)) {
+          return reconstructPath(parent, current);
+        }
+
+        closed.add(currentKey);
+
+        for (const neighbor of grid.neighbors(current)) {
+          const neighborKey = cellKey(neighbor);
+
+          if (closed.has(neighborKey)) {
+            continue;
+          }
+
+          const currentParent = parent.get(currentKey) || current;
+          const source = !sameCell(currentParent, current) && lineOfSight(grid, currentParent, neighbor)
+            ? currentParent
+            : current;
+          const sourceKey = cellKey(source);
+          const tentativeG = (gScore.get(sourceKey) ?? Infinity) +
+            segmentCost(grid, source, neighbor, settings);
+
+          if (tentativeG < (gScore.get(neighborKey) ?? Infinity)) {
+            parent.set(neighborKey, source);
+            gScore.set(neighborKey, tentativeG);
+            counter += 1;
+            open.push([tentativeG + heuristic(grid, neighbor, goal), counter, neighbor]);
+          }
+        }
+      }
+
+      throw new NoPathError("No driveable path found between start and goal.");
+    }
+
+    function lineOfSight(grid, start, goal) {
+      for (const cell of sampleSegmentCells(grid, start, goal)) {
+        if (!grid.isDriveable(cell.row, cell.col)) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    function segmentCost(grid, start, goal, settings) {
+      const startWorld = grid.cellToWorld(start.row, start.col);
+      const goalWorld = grid.cellToWorld(goal.row, goal.col);
+      const distance = Math.hypot(goalWorld.x - startWorld.x, goalWorld.y - startWorld.y);
+
+      if (distance <= 0) {
+        return 0;
+      }
+
+      const cells = sampleSegmentCells(grid, start, goal);
+      let penaltySum = 0;
+
+      for (const cell of cells) {
+        if (!grid.isDriveable(cell.row, cell.col)) {
+          return Infinity;
+        }
+
+        penaltySum += clearancePenalty(
+          grid.clearanceAt(cell.row, cell.col),
+          settings.maxDistance
+        );
+      }
+
+      return distance * (1 + settings.clearanceWeight * (penaltySum / cells.length));
+    }
+
+    function sampleSegmentCells(grid, start, goal) {
+      const startWorld = grid.cellToWorld(start.row, start.col);
+      const goalWorld = grid.cellToWorld(goal.row, goal.col);
+      const distance = Math.hypot(goalWorld.x - startWorld.x, goalWorld.y - startWorld.y);
+      const sampleSpacing = Math.max(grid.resolution / 2, 1e-9);
+      const steps = Math.max(1, Math.ceil(distance / sampleSpacing));
+      const cells = [];
+      let lastKey = "";
+
+      for (let index = 0; index <= steps; index += 1) {
+        const t = index / steps;
+        const x = startWorld.x + (goalWorld.x - startWorld.x) * t;
+        const y = startWorld.y + (goalWorld.y - startWorld.y) * t;
+        const cell = grid.worldToCell(x, y);
+        const key = cellKey(cell);
+
+        if (key !== lastKey) {
+          cells.push(cell);
+          lastKey = key;
+        }
+      }
+
+      return cells;
+    }
+
+    function clearancePenalty(clearance, maxDistance) {
+      if (!Number.isFinite(clearance) || maxDistance <= 0) {
+        return 0;
+      }
+
+      const ratio = Math.max(0, (maxDistance - clearance) / maxDistance);
+      return ratio * ratio;
+    }
+
+    function heuristic(grid, a, b) {
+      const aw = grid.cellToWorld(a.row, a.col);
+      const bw = grid.cellToWorld(b.row, b.col);
+      return Math.hypot(bw.x - aw.x, bw.y - aw.y);
+    }
+
+    function reconstructPath(parent, goal) {
+      const path = [goal];
+      let current = goal;
+      let currentKey = cellKey(current);
+
+      while (!sameCell(parent.get(currentKey), current)) {
+        current = parent.get(currentKey);
+        currentKey = cellKey(current);
+        path.push(current);
+      }
+
+      path.reverse();
+      return path;
+    }
+
+    function sameCell(a, b) {
+      return Boolean(a && b && a.row === b.row && a.col === b.col);
+    }
+
+    function cellKey(cell) {
+      return `${cell.row},${cell.col}`;
+    }
+
+    function pathLength(path) {
+      let length = 0;
+
+      for (let index = 1; index < path.length; index += 1) {
+        length += Math.hypot(
+          path[index].x - path[index - 1].x,
+          path[index].y - path[index - 1].y
+        );
+      }
+
+      return length;
+    }
+
+    function round(value, places) {
+      const scale = 10 ** places;
+      return Math.round(value * scale) / scale;
+    }
+
+    function loadBaseGrid() {
+      if (state.points.length === 0) {
+        state.grid = null;
+        return;
+      }
+
+      state.grid = buildNavigationGrid(state.points, plannerSettings(), state.start, state.goal);
+    }
+
+    function recalculatePath() {
+      if (state.points.length === 0) {
+        setStatus("Open a recorded point map to begin.", "warn");
+        return;
+      }
+
+      try {
+        if (!state.start || !state.goal) {
+          loadBaseGrid();
+          state.path = [];
+          setStatus("Set a start and goal to create a path.", "warn");
+          updateStats();
+          draw();
+          return;
+        }
+
+        const result = planPath(state.points, state.start, state.goal, plannerSettings());
+        state.grid = result.grid;
+        state.path = result.waypoints;
+        setStatus(`Path ready: ${state.path.length} waypoints, ${pathLength(state.path).toFixed(2)} m.`, "good");
+      } catch (error) {
+        state.path = [];
+        setStatus(error.message || String(error), "bad");
+
+        try {
+          loadBaseGrid();
+        } catch (_ignored) {
+          state.grid = null;
+        }
+      }
+
+      updateStats();
+      draw();
+    }
+
+    function fitToMap() {
+      const points = [...state.points];
+
+      if (state.start) {
+        points.push(state.start);
+      }
+
+      if (state.goal) {
+        points.push(state.goal);
+      }
+
+      if (points.length === 0 || canvas.clientWidth <= 0 || canvas.clientHeight <= 0) {
+        state.scale = 80;
+        state.offsetX = 0;
+        state.offsetY = 0;
+        return;
+      }
+
+      const minX = Math.min(...points.map((p) => p.x));
+      const maxX = Math.max(...points.map((p) => p.x));
+      const minY = Math.min(...points.map((p) => p.y));
+      const maxY = Math.max(...points.map((p) => p.y));
+      const width = Math.max(maxX - minX, 1);
+      const height = Math.max(maxY - minY, 1);
+      const padding = 64;
+      const scaleX = (canvas.clientWidth - padding * 2) / width;
+      const scaleY = (canvas.clientHeight - padding * 2) / height;
+      state.scale = clamp(Math.min(scaleX, scaleY), MIN_SCALE, MAX_SCALE);
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      state.offsetX = -centerX * state.scale;
+      state.offsetY = centerY * state.scale;
+      updateHud();
+    }
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const ratio = window.devicePixelRatio || 1;
+      const width = Math.max(1, Math.floor(rect.width * ratio));
+      const height = Math.max(1, Math.floor(rect.height * ratio));
+
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+      if (state.needsFit) {
+        fitToMap();
+        state.needsFit = false;
+      }
+
+      draw();
+    }
+
+    function worldToScreen(point) {
+      return {
+        x: canvas.clientWidth / 2 + state.offsetX + point.x * state.scale,
+        y: canvas.clientHeight / 2 + state.offsetY - point.y * state.scale
+      };
+    }
+
+    function screenToWorld(x, y) {
+      return {
+        x: (x - canvas.clientWidth / 2 - state.offsetX) / state.scale,
+        y: -(y - canvas.clientHeight / 2 - state.offsetY) / state.scale
+      };
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      drawBackground();
+
+      if (controls.showGrid.checked && state.grid) {
+        drawGridLayer();
+      }
+
+      if (controls.showPoints.checked) {
+        drawPointCloud();
+      }
+
+      if (controls.showPath.checked) {
+        drawPath();
+      }
+
+      drawMarker(state.start, "#49b879", "S");
+      drawMarker(state.goal, "#ec6a5e", "G");
+      updateStats();
+      updateHud();
+    }
+
+    function drawBackground() {
+      ctx.fillStyle = "#0d1013";
+      ctx.fillRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+      const spacing = chooseGridSpacing();
+      const topLeft = screenToWorld(0, 0);
+      const bottomRight = screenToWorld(canvas.clientWidth, canvas.clientHeight);
+      const minX = Math.floor(Math.min(topLeft.x, bottomRight.x) / spacing) * spacing;
+      const maxX = Math.ceil(Math.max(topLeft.x, bottomRight.x) / spacing) * spacing;
+      const minY = Math.floor(Math.min(topLeft.y, bottomRight.y) / spacing) * spacing;
+      const maxY = Math.ceil(Math.max(topLeft.y, bottomRight.y) / spacing) * spacing;
+
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.055)";
+
+      for (let x = minX; x <= maxX; x += spacing) {
+        const a = worldToScreen({ x, y: minY });
+        const b = worldToScreen({ x, y: maxY });
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+
+      for (let y = minY; y <= maxY; y += spacing) {
+        const a = worldToScreen({ x: minX, y });
+        const b = worldToScreen({ x: maxX, y });
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+
+      drawAxisLine(minX, maxX, 0, "x");
+      drawAxisLine(minY, maxY, 0, "y");
+    }
+
+    function chooseGridSpacing() {
+      const targetPixels = 70;
+      const rawMeters = targetPixels / state.scale;
+      const power = 10 ** Math.floor(Math.log10(rawMeters));
+      const candidates = [1, 2, 5, 10].map((value) => value * power);
+
+      for (const candidate of candidates) {
+        if (candidate * state.scale >= targetPixels) {
+          return candidate;
+        }
+      }
+
+      return candidates[candidates.length - 1];
+    }
+
+    function drawAxisLine(min, max, value, axis) {
+      if (value < min || value > max) {
+        return;
+      }
+
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.16)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+
+      if (axis === "x") {
+        const a = worldToScreen({ x: min, y: value });
+        const b = worldToScreen({ x: max, y: value });
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      } else {
+        const a = worldToScreen({ x: value, y: min });
+        const b = worldToScreen({ x: value, y: max });
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+      }
+
+      ctx.stroke();
+    }
+
+    function drawGridLayer() {
+      const grid = state.grid;
+      const topLeft = screenToWorld(0, 0);
+      const bottomRight = screenToWorld(canvas.clientWidth, canvas.clientHeight);
+      const minWorldX = Math.min(topLeft.x, bottomRight.x) - grid.resolution;
+      const maxWorldX = Math.max(topLeft.x, bottomRight.x) + grid.resolution;
+      const minWorldY = Math.min(topLeft.y, bottomRight.y) - grid.resolution;
+      const maxWorldY = Math.max(topLeft.y, bottomRight.y) + grid.resolution;
+      const minCell = grid.worldToCell(minWorldX, minWorldY);
+      const maxCell = grid.worldToCell(maxWorldX, maxWorldY);
+      const minRow = clamp(Math.min(minCell.row, maxCell.row), 0, grid.rows - 1);
+      const maxRow = clamp(Math.max(minCell.row, maxCell.row), 0, grid.rows - 1);
+      const minCol = clamp(Math.min(minCell.col, maxCell.col), 0, grid.cols - 1);
+      const maxCol = clamp(Math.max(minCell.col, maxCell.col), 0, grid.cols - 1);
+      const cellPixels = Math.max(1, grid.resolution * state.scale);
+      const drawUndriveable = cellPixels >= 5;
+      const maxDistance = plannerSettings().maxDistance;
+
+      for (let row = minRow; row <= maxRow; row += 1) {
+        for (let col = minCol; col <= maxCol; col += 1) {
+          const world = grid.cellToWorld(row, col);
+          const screen = worldToScreen(world);
+          const left = screen.x - cellPixels / 2;
+          const top = screen.y - cellPixels / 2;
+
+          if (grid.driveable[row][col]) {
+            const ratio = Math.max(0, Math.min(1, grid.clearance[row][col] / maxDistance));
+            ctx.fillStyle = clearanceColor(ratio);
+            ctx.fillRect(left, top, cellPixels + 1, cellPixels + 1);
+          } else if (drawUndriveable) {
+            ctx.fillStyle = "rgba(255, 255, 255, 0.025)";
+            ctx.fillRect(left, top, cellPixels + 1, cellPixels + 1);
+          }
+        }
+      }
+    }
+
+    function clearanceColor(ratio) {
+      const red = Math.round(231 - 177 * ratio);
+      const green = Math.round(90 + 107 * ratio);
+      const blue = Math.round(82 + 58 * ratio);
+      const alpha = 0.18 + ratio * 0.22;
+      return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+    }
+
+    function drawPointCloud() {
+      const radius = clamp(state.scale * 0.035, 1.5, 4.5);
+      ctx.fillStyle = "rgba(232, 241, 242, 0.78)";
+      const topLeft = screenToWorld(0, 0);
+      const bottomRight = screenToWorld(canvas.clientWidth, canvas.clientHeight);
+      const minX = Math.min(topLeft.x, bottomRight.x);
+      const maxX = Math.max(topLeft.x, bottomRight.x);
+      const minY = Math.min(topLeft.y, bottomRight.y);
+      const maxY = Math.max(topLeft.y, bottomRight.y);
+
+      for (const point of state.points) {
+        if (point.x < minX || point.x > maxX || point.y < minY || point.y > maxY) {
+          continue;
+        }
+
+        const screen = worldToScreen(point);
+        ctx.beginPath();
+        ctx.arc(screen.x, screen.y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawPath() {
+      if (state.path.length === 0) {
+        return;
+      }
+
+      ctx.lineWidth = 4;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "rgba(84, 161, 216, 0.95)";
+      ctx.beginPath();
+
+      state.path.forEach((point, index) => {
+        const screen = worldToScreen(point);
+
+        if (index === 0) {
+          ctx.moveTo(screen.x, screen.y);
+        } else {
+          ctx.lineTo(screen.x, screen.y);
+        }
+      });
+
+      ctx.stroke();
+
+      ctx.fillStyle = "#dff3ff";
+      for (const point of state.path) {
+        const screen = worldToScreen(point);
+        ctx.beginPath();
+        ctx.arc(screen.x, screen.y, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawMarker(point, color, label) {
+      if (!point) {
+        return;
+      }
+
+      const screen = worldToScreen(point);
+      ctx.fillStyle = color;
+      ctx.strokeStyle = "rgba(0, 0, 0, 0.55)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(screen.x, screen.y, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      if (controls.showLabels.checked) {
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "700 11px Segoe UI, Arial, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(label, screen.x, screen.y);
+      }
+    }
+
+    function setMode(mode) {
+      state.mode = mode;
+      controls.modePan.classList.toggle("active", mode === "pan");
+      controls.modeStart.classList.toggle("active", mode === "start");
+      controls.modeGoal.classList.toggle("active", mode === "goal");
+    }
+
+    function setStatus(text, kind) {
+      controls.status.textContent = text;
+      controls.status.className = `status ${kind || ""}`.trim();
+    }
+
+    function updateStats() {
+      controls.pointCount.textContent = state.points.length.toString();
+
+      if (state.grid) {
+        controls.cellCount.textContent = `${state.grid.rows} x ${state.grid.cols}`;
+      } else {
+        controls.cellCount.textContent = "0";
+      }
+
+      controls.pathCount.textContent = state.path.length.toString();
+      controls.pathLength.textContent = `${pathLength(state.path).toFixed(2)} m`;
+      controls.exportPath.disabled = state.path.length === 0;
+    }
+
+    function updateHud(world) {
+      if (world) {
+        controls.cursorReadout.textContent = `x ${world.x.toFixed(2)}, y ${world.y.toFixed(2)}`;
+      }
+
+      controls.zoomReadout.textContent = `${state.scale.toFixed(0)} px/m`;
+    }
+
+    function zoomAt(screenX, screenY, factor) {
+      const before = screenToWorld(screenX, screenY);
+      state.scale = clamp(state.scale * factor, MIN_SCALE, MAX_SCALE);
+      const after = screenToWorld(screenX, screenY);
+      state.offsetX += (after.x - before.x) * state.scale;
+      state.offsetY -= (after.y - before.y) * state.scale;
+      draw();
+    }
+
+    function setPointFromScreen(mode, screenX, screenY) {
+      const world = screenToWorld(screenX, screenY);
+      const point = {
+        x: round(world.x, 3),
+        y: round(world.y, 3)
+      };
+
+      if (mode === "start") {
+        state.start = point;
+      } else if (mode === "goal") {
+        state.goal = point;
+      }
+
+      recalculatePath();
+    }
+
+    function downloadPath() {
+      if (state.path.length === 0) {
+        return;
+      }
+
+      const payload = {
+        units: "meters",
+        created_at: Date.now() / 1000,
+        start: state.start,
+        goal: state.goal,
+        path: state.path
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2) + "\n"], {
+        type: "application/json"
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "planned_path.json";
+      link.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function clamp(value, low, high) {
+      return Math.max(low, Math.min(high, value));
+    }
+
+    controls.mapFile.addEventListener("change", async (event) => {
+      const file = event.target.files[0];
+
+      if (!file) {
+        return;
+      }
+
+      try {
+        const text = await file.text();
+        state.points = parseMapJson(JSON.parse(text));
+        state.start = null;
+        state.goal = null;
+        state.path = [];
+        state.needsFit = true;
+        loadBaseGrid();
+        setStatus(`Loaded ${state.points.length} points from ${file.name}.`, "good");
+        updateStats();
+        resizeCanvas();
+      } catch (error) {
+        state.points = [];
+        state.grid = null;
+        state.path = [];
+        setStatus(error.message || String(error), "bad");
+        updateStats();
+        draw();
+      }
+    });
+
+    for (const input of [
+      controls.maxDistance,
+      controls.resolution,
+      controls.clearanceWeight,
+      controls.snapDistance
+    ]) {
+      input.addEventListener("change", recalculatePath);
+    }
+
+    for (const checkbox of [
+      controls.showGrid,
+      controls.showPoints,
+      controls.showPath,
+      controls.showLabels
+    ]) {
+      checkbox.addEventListener("change", draw);
+    }
+
+    controls.modePan.addEventListener("click", () => setMode("pan"));
+    controls.modeStart.addEventListener("click", () => setMode("start"));
+    controls.modeGoal.addEventListener("click", () => setMode("goal"));
+    controls.fitView.addEventListener("click", () => {
+      fitToMap();
+      draw();
+    });
+    controls.clearPath.addEventListener("click", () => {
+      state.start = null;
+      state.goal = null;
+      state.path = [];
+      recalculatePath();
+    });
+    controls.exportPath.addEventListener("click", downloadPath);
+    controls.zoomIn.addEventListener("click", () => zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 1.2));
+    controls.zoomOut.addEventListener("click", () => zoomAt(canvas.clientWidth / 2, canvas.clientHeight / 2, 1 / 1.2));
+
+    canvas.addEventListener("pointerdown", (event) => {
+      canvas.setPointerCapture(event.pointerId);
+      state.pointer.active = true;
+      state.pointer.id = event.pointerId;
+      state.pointer.startX = event.offsetX;
+      state.pointer.startY = event.offsetY;
+      state.pointer.lastX = event.offsetX;
+      state.pointer.lastY = event.offsetY;
+      state.pointer.moved = false;
+      canvas.classList.add("dragging");
+    });
+
+    canvas.addEventListener("pointermove", (event) => {
+      const world = screenToWorld(event.offsetX, event.offsetY);
+      updateHud(world);
+
+      if (!state.pointer.active || state.pointer.id !== event.pointerId) {
+        return;
+      }
+
+      const dx = event.offsetX - state.pointer.lastX;
+      const dy = event.offsetY - state.pointer.lastY;
+      const totalDx = event.offsetX - state.pointer.startX;
+      const totalDy = event.offsetY - state.pointer.startY;
+
+      if (Math.hypot(totalDx, totalDy) > 3) {
+        state.pointer.moved = true;
+      }
+
+      state.offsetX += dx;
+      state.offsetY += dy;
+      state.pointer.lastX = event.offsetX;
+      state.pointer.lastY = event.offsetY;
+      draw();
+    });
+
+    canvas.addEventListener("pointerup", (event) => {
+      if (state.pointer.active && state.pointer.id === event.pointerId) {
+        if (!state.pointer.moved && state.mode !== "pan") {
+          setPointFromScreen(state.mode, event.offsetX, event.offsetY);
+        }
+      }
+
+      state.pointer.active = false;
+      state.pointer.id = null;
+      canvas.classList.remove("dragging");
+    });
+
+    canvas.addEventListener("pointercancel", () => {
+      state.pointer.active = false;
+      state.pointer.id = null;
+      canvas.classList.remove("dragging");
+    });
+
+    canvas.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      const factor = Math.exp(-event.deltaY * 0.0012);
+      zoomAt(event.offsetX, event.offsetY, factor);
+    }, { passive: false });
+
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+    setStatus("Open a recorded point map to begin.", "warn");
+  </script>
+</body>
+</html>

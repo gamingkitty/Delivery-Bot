@@ -163,16 +163,17 @@ class Chassis:
         left_cm_per_sec = forward_cm_per_sec - turn_rad_per_sec * half_track_cm
         right_cm_per_sec = forward_cm_per_sec + turn_rad_per_sec * half_track_cm
 
-        self.left_motor.set_velocity(
-            -self._wheel_linear_to_motor_deg(left_cm_per_sec)
-        )
-        self.right_motor.set_velocity(
-            self._wheel_linear_to_motor_deg(right_cm_per_sec)
+        left_deg_per_sec = -self._wheel_linear_to_motor_deg(left_cm_per_sec)
+        right_deg_per_sec = self._wheel_linear_to_motor_deg(right_cm_per_sec)
+
+        self.left_motor.set_velocity_pair(
+            self.right_motor,
+            left_deg_per_sec,
+            right_deg_per_sec,
         )
 
     def stop(self):
-        self.left_motor.stop()
-        self.right_motor.stop()
+        self.left_motor.set_velocity_pair(self.right_motor, 0.0, 0.0)
 
     def _wheel_linear_to_motor_deg(self, wheel_cm_per_sec: float) -> float:
         return wheel_cm_per_sec * self._wheel_degrees_per_cm

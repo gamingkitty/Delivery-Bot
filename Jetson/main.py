@@ -10,8 +10,6 @@ def main():
 
     with ArduinoIO(port=ARDUINO_PORT) as arduino:
         chassis, gps, _imu = create_chassis(arduino)
-        data = gps.get_data()
-        print(data)
 
         correct_heading = False
 
@@ -19,7 +17,6 @@ def main():
             while True:
                 if controller.update():
                     chassis.update_position()
-                    print(chassis.get_position())
                     if controller.get_button_down("CROSS"):
                         correct_heading = not correct_heading
                         if correct_heading:
