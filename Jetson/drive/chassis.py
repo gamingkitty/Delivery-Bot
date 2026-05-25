@@ -28,6 +28,7 @@ class Chassis:
         imu: IMU,
         gps: GPS,
         angle_kp: float = ANGLE_KP,
+        drive_kp: float = 50,
         max_turn_deg_per_sec: float = None,
     ):
         self.wheel_diameter_cm = float(wheel_diameter_cm)
@@ -37,34 +38,47 @@ class Chassis:
         self.imu = imu
         self.gps = gps
         self.angle_kp = float(angle_kp)
+        self.drive_kp = float(drive_kp)
+        self.max_drive_speed = 50.0
         self.max_turn_deg_per_sec = (
             None if max_turn_deg_per_sec is None else abs(float(max_turn_deg_per_sec))
         )
 
-        self.gps.update()
-        initial_pos = self.gps.get_position_meters()
+        initial_pos_x = 0
+        initial_pos_y = 0
+        num_gps_pos = 0
         start = time.time()
-        while initial_pos is None:
-            if time.time() - start > 2.0:
-                print("Warning: GPS doesn't have fix on initialization.")
-                initial_pos = (0, 0)
+        while num_gps_pos < 10:
+            if time.time() - start > 5.0:
+                print(f"Warning: GPS only has {num_gps_pos} fixes on initialization")
                 break
-            self.gps.update()
-            initial_pos = self.gps.get_position_meters()
+            if self.gps.update():
+                gps_pos = self.gps.get_position_meters()
+                if gps_pos is None:
+                    continue
+
+                initial_pos_x += gps_pos[0]
+                initial_pos_y += gps_pos[1]
+                num_gps_pos += 1
+
+        if num_gps_pos:
+            initial_pos_x /= num_gps_pos
+            initial_pos_y /= num_gps_pos
 
         self.left_motor_position = left_motor.read_position_degrees()
         self.right_motor_position = right_motor.read_position_degrees()
 
         # X: Meters, Y: Meters, Heading: Degrees
         # Assumes robot is initially facing east.
-        self.position = (initial_pos[0], initial_pos[1], 0)
+        self.position = (initial_pos_x, initial_pos_y, 0)
+        self.wanted_position = None
 
         # Can replace these later with a full kalman filter
         self.odom_uncertainty_m = 1.0
 
-        self.gps_uncertainty_m = 3.0
-        self.odom_error_per_meter = 0.05
-        self.min_gps_weight = 0.02
+        self.gps_uncertainty_m = 4.0
+        self.odom_error_per_meter = 0.06
+        self.min_gps_weight = 0.03
         self.max_gps_weight = 0.35
 
         if self.wheel_diameter_cm <= 0:
@@ -136,6 +150,32 @@ class Chassis:
 
     def get_position(self):
         return self.position
+
+    def set_wanted_position(self, position):
+        self.wanted_position = position
+
+    def drive_to_wanted_position(self):
+        if self.wanted_position is None:
+            raise RuntimeError("wanted_position must be set before driving to it")
+
+        dx = self.wanted_position[0] - self.position[0]
+        dy = self.wanted_position[1] - self.position[1]
+        drive_angle = math.degrees(math.atan2(dy, dx))
+        distance = math.hypot(dx, dy)
+
+        if distance < 0.2:
+            self.stop()
+            return
+
+        self.set_wanted_angle(drive_angle)
+        angle_error = self._angle_error(self.wanted_angle, self.position[2])
+
+        if abs(angle_error) > 10:
+            forward = 0
+        else:
+            forward = min(self.max_drive_speed, distance * self.drive_kp)
+
+        self.set_velocity(forward)
 
     def set_wanted_angle(self, angle: float):
         self.wanted_angle = self._normalize_angle(angle)

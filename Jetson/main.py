@@ -5,6 +5,13 @@ from robot import CONTROL_INTERVAL_SEC, controller_velocity, create_chassis
 from teleop.controller import Controller
 
 
+# sudo pkill wpa_supplicant
+# sudo ip link set wlan0 up
+# sudo wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant/wpa_supplicant-wlan0.conf -D nl80211
+# sudo dhclient wlan0
+# ping -c 4 8.8.8.8
+
+
 def main():
     controller = Controller()
 
