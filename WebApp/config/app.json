@@ -1,0 +1,55 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8000,
+    "debug": false
+  },
+  "auth": {
+    "user_pin": "3141",
+    "admin_pin": "1428",
+    "session_secret": "change-this-before-campus-use"
+  },
+  "map": {
+    "image": "../assets/campus_map.png",
+    "top_left": {
+      "lat": 47.694234,
+      "lon": -122.070856
+    },
+    "bottom_right": {
+      "lat": 47.691848,
+      "lon": -122.065145
+    }
+  },
+  "ui": {
+    "poll_interval_ms": 750
+  },
+  "debug": {
+    "enabled": true
+  },
+  "stops": [
+    {
+      "id": "library",
+      "name": "Library",
+      "lat": 47.693087,
+      "lon": -122.069801,
+      "description": "Main library entrance",
+      "enabled": true
+    },
+    {
+      "id": "math_sci",
+      "name": "Math Sci",
+      "lat": 47.693652,
+      "lon": -122.070174,
+      "description": "Math sci lower entrance",
+      "enabled": true
+    },
+    {
+      "id": "student_center",
+      "name": "Student Center",
+      "lat": 47.693964,
+      "lon": -122.069745,
+      "description": "Student center entrance",
+      "enabled": true
+    }
+  ]
+}

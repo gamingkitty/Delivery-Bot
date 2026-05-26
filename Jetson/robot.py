@@ -4,6 +4,8 @@ from hardware.arduino_io import ArduinoIO
 from hardware.gps import GPS
 from hardware.imu import IMU
 from config import (
+    GPS_PORT,
+    GPS_ORIGIN,
     LEFT_MOTOR,
     MAX_FORWARD_CM_PER_SEC,
     MAX_TURN_DEG_PER_SEC,
@@ -12,7 +14,6 @@ from config import (
     TRACK_WIDTH_CM,
     WHEEL_DIAMETER_CM,
 )
-from teleop.controller import Controller
 
 
 CONTROL_INTERVAL_SEC = 0.05
@@ -30,13 +31,18 @@ def create_motor(arduino: ArduinoIO, motor_config: dict) -> Motor:
     )
 
 
-def create_chassis(arduino: ArduinoIO, zero_imu: bool = True):
+def create_chassis(
+    arduino: ArduinoIO,
+    zero_imu: bool = True,
+    gps_port: str = GPS_PORT,
+    gps_origin=GPS_ORIGIN,
+):
     imu = IMU(arduino)
 
     if zero_imu:
         imu.zero()
 
-    gps = GPS()
+    gps = GPS(port=gps_port, origin=gps_origin)
     chassis = Chassis(
         WHEEL_DIAMETER_CM,
         TRACK_WIDTH_CM,
@@ -51,7 +57,7 @@ def create_chassis(arduino: ArduinoIO, zero_imu: bool = True):
 
 
 def controller_velocity(
-    controller: Controller,
+    controller,
     max_forward_cm_per_sec: float = MAX_FORWARD_CM_PER_SEC,
     max_turn_deg_per_sec: float = MAX_TURN_DEG_PER_SEC,
 ):

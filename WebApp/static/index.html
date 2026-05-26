@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Delivery Bot Dispatch</title>
+    <link rel="stylesheet" href="/static/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="map-stage" aria-label="Campus map">
+        <div class="map-frame" id="mapFrame">
+          <img id="campusMap" alt="Campus map">
+          <svg id="routeLayer" class="route-layer" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <polyline id="plannedRoute" points=""></polyline>
+          </svg>
+          <div id="robotMarker" class="marker robot" title="Robot"></div>
+          <div id="destinationMarker" class="marker destination" title="Destination"></div>
+        </div>
+      </section>
+
+      <aside class="control-panel">
+        <div class="brand-row">
+          <div>
+            <h1>Delivery Bot</h1>
+            <p id="connectionState">Connecting</p>
+          </div>
+          <div id="statePill" class="state-pill">Idle</div>
+        </div>
+
+        <form id="dispatchForm" class="panel-section">
+          <label for="destinationSelect">Destination</label>
+          <select id="destinationSelect" name="destination"></select>
+
+          <label for="userPin">PIN</label>
+          <input id="userPin" name="pin" type="password" inputmode="numeric" autocomplete="current-password">
+
+          <div class="button-row">
+            <button type="submit" class="primary">Send</button>
+            <button id="stopButton" type="button" class="danger">Stop</button>
+          </div>
+        </form>
+
+        <section class="panel-section status-grid" aria-label="Robot status">
+          <div>
+            <span>Status</span>
+            <strong id="statusText">Idle</strong>
+          </div>
+          <div>
+            <span>Progress</span>
+            <strong id="progressText">0%</strong>
+          </div>
+          <div>
+            <span>Heading</span>
+            <strong id="headingText">0 deg</strong>
+          </div>
+          <div>
+            <span>Waypoint</span>
+            <strong id="waypointText">-</strong>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <label for="adminPin">Admin PIN</label>
+          <div class="admin-login">
+            <input id="adminPin" type="password" inputmode="numeric">
+            <button id="adminLoginButton" type="button">Unlock</button>
+          </div>
+        </section>
+
+        <section id="debugPanel" class="debug-panel" hidden>
+          <div id="debugError" class="debug-error" hidden></div>
+          <div class="debug-grid">
+            <div>
+              <h2>Camera</h2>
+              <img id="cameraFeed" alt="Camera feed">
+              <div class="manual-control-pad" aria-label="Manual robot control">
+                <button type="button" class="manual-control-button manual-forward" data-manual-direction="forward" aria-label="Forward" title="Forward">&uarr;</button>
+                <button type="button" class="manual-control-button manual-left" data-manual-direction="left" aria-label="Turn left" title="Turn left">&larr;</button>
+                <button type="button" class="manual-control-button manual-backward" data-manual-direction="backward" aria-label="Backward" title="Backward">&darr;</button>
+                <button type="button" class="manual-control-button manual-right" data-manual-direction="right" aria-label="Turn right" title="Turn right">&rarr;</button>
+              </div>
+            </div>
+            <div>
+              <h2>DeepScene</h2>
+              <img id="deepsceneFeed" alt="DeepScene overlay">
+            </div>
+          </div>
+          <pre id="debugStatus">{}</pre>
+        </section>
+      </aside>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

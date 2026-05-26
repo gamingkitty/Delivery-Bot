@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
+  <rect width="640" height="360" fill="#1f2933"/>
+  <rect x="178" y="112" width="284" height="136" rx="8" fill="#3e4c59"/>
+  <circle cx="320" cy="180" r="48" fill="#9fb3c8"/>
+  <circle cx="320" cy="180" r="25" fill="#1f2933"/>
+  <path d="M224 95 L274 95 L292 112 L206 112 Z" fill="#52606d"/>
+  <text x="320" y="302" text-anchor="middle" font-family="Arial, sans-serif" font-size="26" fill="#d9e2ec">Camera feed unavailable</text>
+</svg>
+

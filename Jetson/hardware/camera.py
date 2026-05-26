@@ -33,6 +33,7 @@ class Camera:
         self,
         camera_uri: str = DEFAULT_CAMERA_URI,
         model_dir: str = DEFAULT_MODEL_DIR,
+        deepscene_enabled: bool = True,
         input_width: int = 640,
         input_height: int = 480,
         input_rate: int = 15,
@@ -41,6 +42,7 @@ class Camera:
     ):
         self.camera_uri = camera_uri
         self.model_dir = model_dir
+        self.deepscene_enabled = bool(deepscene_enabled)
         self.input_width = int(input_width)
         self.input_height = int(input_height)
         self.input_rate = int(input_rate)
@@ -59,8 +61,9 @@ class Camera:
         self._load_runtime_modules()
 
         try:
-            self.colors_file = self._make_runtime_colors_file()
-            self.net = self._create_deepscene_model()
+            if self.deepscene_enabled:
+                self.colors_file = self._make_runtime_colors_file()
+                self.net = self._create_deepscene_model()
             self.source = self._create_video_source()
         except Exception:
             self.close()
@@ -96,9 +99,20 @@ class Camera:
 
             original = self._cuda_image_to_bgr(img)
 
+            if self.net is None:
+                empty_mask = self.np.zeros(original.shape[:2], dtype=bool)
+                return DeepSceneFrame(
+                    original_bgr=original,
+                    mask_bgr=original.copy(),
+                    trail_mask=empty_mask,
+                    obstacle_mask=empty_mask.copy(),
+                    overlay_bgr=original.copy(),
+                    trail_fraction=0.0,
+                    obstacle_fraction=0.0,
+                )
+
             self.net.Process(img)
             self.net.Mask(img, filter_mode="point")
-
             mask = self._cuda_image_to_bgr(img)
             trail_mask, obstacle_mask = self._detect_trail_and_obstacles(mask)
             overlay = self._draw_scene_overlay(original, trail_mask, obstacle_mask)
@@ -131,16 +145,25 @@ class Camera:
             raise ImportError("Camera requires OpenCV and NumPy to process frames") from exc
 
         try:
-            import jetson.inference as jetson_inference
-            import jetson.utils as jetson_utils
+            import jetson_utils
         except ImportError:
             try:
-                import jetson_inference
-                import jetson_utils
+                import jetson.utils as jetson_utils
             except ImportError as exc:
-                raise ImportError(
-                    "Camera requires the jetson-inference Python modules"
-                ) from exc
+                raise ImportError("Camera requires the jetson-utils Python module") from exc
+
+        jetson_inference = None
+
+        if self.deepscene_enabled:
+            try:
+                import jetson_inference
+            except ImportError:
+                try:
+                    import jetson.inference as jetson_inference
+                except ImportError as exc:
+                    raise ImportError(
+                        "DeepScene requires the jetson-inference Python module"
+                    ) from exc
 
         self.cv2 = cv2
         self.np = np
@@ -149,13 +172,11 @@ class Camera:
 
     def _create_deepscene_model(self):
         return self.jetson_inference.segNet(
-            argv=[
-                "--model=" + os.path.join(self.model_dir, "fcn_resnet18.onnx"),
-                "--labels=" + os.path.join(self.model_dir, "classes.txt"),
-                "--colors=" + self.colors_file,
-                "--input-blob=input_0",
-                "--output-blob=output_0",
-            ]
+            model=os.path.join(self.model_dir, "fcn_resnet18.onnx"),
+            labels=os.path.join(self.model_dir, "classes.txt"),
+            colors=self.colors_file,
+            input_blob="input_0",
+            output_blob="output_0",
         )
 
     def _create_video_source(self):

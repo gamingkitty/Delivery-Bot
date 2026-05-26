@@ -8,7 +8,7 @@ PID/feed-forward tuning values live in `Jetson/config.py`.
 ## Layout
 
 - `Arduino/` contains the Arduino Nano motor, encoder, and IMU bridge sketch.
-- `Jetson/main.py` is the Jetson-side runtime entry point.
+- `Jetson/main.py` is the Jetson-side web dispatch runtime entry point.
 - `Jetson/config.py` keeps robot dimensions, pins, ports, and tuning constants.
 - `Jetson/drive/` contains the differential-drive chassis and motor/encoder handling.
 - `Jetson/hardware/` contains serial, GPS, IMU, and sonar hardware interfaces.
@@ -16,15 +16,33 @@ PID/feed-forward tuning values live in `Jetson/config.py`.
 - `Jetson/maps/` is the default location for saved map JSON files.
 - `Jetson/teleop/` contains manual controller input.
 - `Jetson/tools/` contains maintenance utilities such as PID tuning.
+- `WebApp/` contains the Jetson-hosted campus dispatch web app.
 
 Future camera feedback code should fit beside these as a focused package, for
 example `Jetson/vision/`, once that system has more than one small module.
 
-Run the main Jetson program with:
+Run the Jetson web dispatch runtime with:
 
 ```bash
 python Jetson/main.py
 ```
+
+This starts the web app with real robot hardware enabled. Run manual controller
+teleop with:
+
+```bash
+python Jetson/teleop/teleop.py
+```
+
+Run the same web app module directly with:
+
+```bash
+python -m WebApp.app
+```
+
+Edit `WebApp/config/app.json` to set the campus map image, GPS bounds, named
+stops, and PINs. Edit `Jetson/config.py` for robot ports, navigation defaults,
+point map path, camera, and DeepScene settings.
 
 Run the motor tuning utility with:
 

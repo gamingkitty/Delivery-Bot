@@ -1,48 +1,20 @@
-import time
-from hardware.arduino_io import ArduinoIO
-from config import ARDUINO_PORT
-from robot import CONTROL_INTERVAL_SEC, controller_velocity, create_chassis
-from teleop.controller import Controller
+import sys
+from pathlib import Path
 
 
-# sudo pkill wpa_supplicant
-# sudo ip link set wlan0 up
-# sudo wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant/wpa_supplicant-wlan0.conf -D nl80211
-# sudo dhclient wlan0
-# ping -c 4 8.8.8.8
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from WebApp.app import create_app, run_app
+from WebApp.config import DEFAULT_CONFIG_PATH, load_config
+from robot_service import DeliveryRobotService
 
 
 def main():
-    controller = Controller()
-
-    with ArduinoIO(port=ARDUINO_PORT) as arduino:
-        chassis, gps, _imu = create_chassis(arduino)
-
-        correct_heading = False
-
-        try:
-            while True:
-                if controller.update():
-                    chassis.update_position()
-                    if controller.get_button_down("CROSS"):
-                        correct_heading = not correct_heading
-                        if correct_heading:
-                            chassis.set_wanted_angle(chassis.get_position()[2])
-                    forward, turn = controller_velocity(controller)
-                    if correct_heading:
-                        turn = None
-                    chassis.set_velocity(forward, turn)
-                else:
-                    chassis.stop()
-
-                time.sleep(CONTROL_INTERVAL_SEC)
-
-        except KeyboardInterrupt:
-            print()
-
-        finally:
-            chassis.stop()
-            gps.close()
+    config = load_config(DEFAULT_CONFIG_PATH)
+    app = create_app(config=config, controller=DeliveryRobotService())
+    run_app(app)
 
 
 if __name__ == "__main__":

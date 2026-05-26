@@ -10,10 +10,33 @@ if str(JETSON_ROOT) not in sys.path:
 
 from config import (
     ARDUINO_PORT,
+    CAMERA_INPUT_HEIGHT,
+    CAMERA_INPUT_RATE,
+    CAMERA_INPUT_WIDTH,
+    CAMERA_URI,
+    GPS_PORT,
     NAV_CLEARANCE_COST_WEIGHT,
+    NAV_CONTROL_INTERVAL_SEC,
+    NAV_DEFAULT_DESTINATION_X_M,
+    NAV_DEFAULT_DESTINATION_Y_M,
+    NAV_DESTINATION_REACHED_DISTANCE_M,
     NAV_ENDPOINT_SNAP_MAX_DISTANCE_M,
+    NAV_ENABLE_VIDEO_FEEDBACK,
     NAV_GRID_RESOLUTION_M,
+    NAV_LOG_INTERVAL_SEC,
+    NAV_MAP_PATH,
     NAV_MAX_MAP_DISTANCE_M,
+    NAV_ROUTE_TIMEOUT_SEC,
+    NAV_VIDEO_FEEDBACK_BOTTOM_WEIGHT,
+    NAV_VIDEO_FEEDBACK_LOOKAHEAD_M,
+    NAV_VIDEO_FEEDBACK_MAX_LATERAL_CORRECTION_M,
+    NAV_VIDEO_FEEDBACK_MIN_TRAIL_FRACTION,
+    NAV_VIDEO_FEEDBACK_MIN_TRAIL_PIXELS,
+    NAV_VIDEO_FEEDBACK_ROI_BOTTOM_FRACTION,
+    NAV_VIDEO_FEEDBACK_ROI_TOP_FRACTION,
+    NAV_WAYPOINT_REACHED_DISTANCE_M,
+    NAV_WAYPOINT_TIMEOUT_SEC,
+    ZERO_IMU_ON_START,
 )
 from hardware.arduino_io import ArduinoIO
 from hardware.camera import Camera
@@ -23,43 +46,51 @@ from robot import CONTROL_INTERVAL_SEC as ROBOT_CONTROL_INTERVAL_SEC
 from robot import create_chassis
 
 
-MAP_PATH = JETSON_ROOT / "maps" / "house_map.json"
-DESTINATION_X_M = 12777.302
-DESTINATION_Y_M = 4029.061
+MAP_PATH = NAV_MAP_PATH
+DESTINATION_X_M = NAV_DEFAULT_DESTINATION_X_M
+DESTINATION_Y_M = NAV_DEFAULT_DESTINATION_Y_M
 
 ARDUINO_SERIAL_PORT = ARDUINO_PORT
-ZERO_IMU_ON_START = True
+GPS_SERIAL_PORT = GPS_PORT
 
 PLAN_MAX_MAP_DISTANCE_M = NAV_MAX_MAP_DISTANCE_M
 PLAN_GRID_RESOLUTION_M = NAV_GRID_RESOLUTION_M
 PLAN_CLEARANCE_COST_WEIGHT = NAV_CLEARANCE_COST_WEIGHT
 PLAN_ENDPOINT_SNAP_MAX_DISTANCE_M = NAV_ENDPOINT_SNAP_MAX_DISTANCE_M
 
-CONTROL_INTERVAL_SEC = ROBOT_CONTROL_INTERVAL_SEC
-WAYPOINT_REACHED_DISTANCE_M = 0.35
-DESTINATION_REACHED_DISTANCE_M = 0.30
-WAYPOINT_TIMEOUT_SEC = 45.0
-ROUTE_TIMEOUT_SEC = None
-LOG_INTERVAL_SEC = 1.0
+CONTROL_INTERVAL_SEC = NAV_CONTROL_INTERVAL_SEC or ROBOT_CONTROL_INTERVAL_SEC
+WAYPOINT_REACHED_DISTANCE_M = NAV_WAYPOINT_REACHED_DISTANCE_M
+DESTINATION_REACHED_DISTANCE_M = NAV_DESTINATION_REACHED_DISTANCE_M
+WAYPOINT_TIMEOUT_SEC = NAV_WAYPOINT_TIMEOUT_SEC
+ROUTE_TIMEOUT_SEC = NAV_ROUTE_TIMEOUT_SEC
+LOG_INTERVAL_SEC = NAV_LOG_INTERVAL_SEC
 
-ENABLE_VIDEO_FEEDBACK = True
-VIDEO_FEEDBACK_LOOKAHEAD_M = 1.2
-VIDEO_FEEDBACK_MAX_LATERAL_CORRECTION_M = 0.55
-VIDEO_FEEDBACK_ROI_TOP_FRACTION = 0.45
-VIDEO_FEEDBACK_ROI_BOTTOM_FRACTION = 0.95
-VIDEO_FEEDBACK_MIN_TRAIL_FRACTION = 0.01
-VIDEO_FEEDBACK_MIN_TRAIL_PIXELS = 80
-VIDEO_FEEDBACK_BOTTOM_WEIGHT = 2.0
+ENABLE_VIDEO_FEEDBACK = NAV_ENABLE_VIDEO_FEEDBACK
+VIDEO_FEEDBACK_LOOKAHEAD_M = NAV_VIDEO_FEEDBACK_LOOKAHEAD_M
+VIDEO_FEEDBACK_MAX_LATERAL_CORRECTION_M = NAV_VIDEO_FEEDBACK_MAX_LATERAL_CORRECTION_M
+VIDEO_FEEDBACK_ROI_TOP_FRACTION = NAV_VIDEO_FEEDBACK_ROI_TOP_FRACTION
+VIDEO_FEEDBACK_ROI_BOTTOM_FRACTION = NAV_VIDEO_FEEDBACK_ROI_BOTTOM_FRACTION
+VIDEO_FEEDBACK_MIN_TRAIL_FRACTION = NAV_VIDEO_FEEDBACK_MIN_TRAIL_FRACTION
+VIDEO_FEEDBACK_MIN_TRAIL_PIXELS = NAV_VIDEO_FEEDBACK_MIN_TRAIL_PIXELS
+VIDEO_FEEDBACK_BOTTOM_WEIGHT = NAV_VIDEO_FEEDBACK_BOTTOM_WEIGHT
 
 _navigation_camera = None
 _navigation_camera_unavailable = False
+
+
+class NavigationStopped(RuntimeError):
+    """Raised when an active navigation run is stopped by an external command."""
 
 
 def main():
     point_map = PointCloudMap.load(MAP_PATH)
 
     with ArduinoIO(port=ARDUINO_SERIAL_PORT) as arduino:
-        chassis, gps, _imu = create_chassis(arduino, zero_imu=ZERO_IMU_ON_START)
+        chassis, gps, _imu = create_chassis(
+            arduino,
+            zero_imu=ZERO_IMU_ON_START,
+            gps_port=GPS_SERIAL_PORT,
+        )
 
         try:
             chassis.update_position()
@@ -86,28 +117,49 @@ def main():
             gps.close()
 
 
-def plan_route(point_map, start_xy, destination_xy):
+def plan_route(
+    point_map,
+    start_xy,
+    destination_xy,
+    max_map_distance_m=PLAN_MAX_MAP_DISTANCE_M,
+    grid_resolution_m=PLAN_GRID_RESOLUTION_M,
+    clearance_cost_weight=PLAN_CLEARANCE_COST_WEIGHT,
+    endpoint_snap_max_distance_m=PLAN_ENDPOINT_SNAP_MAX_DISTANCE_M,
+):
     return plan_path(
         point_map,
         start_xy=start_xy,
         target_xy=destination_xy,
-        max_map_distance_m=PLAN_MAX_MAP_DISTANCE_M,
-        grid_resolution_m=PLAN_GRID_RESOLUTION_M,
-        clearance_cost_weight=PLAN_CLEARANCE_COST_WEIGHT,
-        endpoint_snap_max_distance_m=PLAN_ENDPOINT_SNAP_MAX_DISTANCE_M,
+        max_map_distance_m=max_map_distance_m,
+        grid_resolution_m=grid_resolution_m,
+        clearance_cost_weight=clearance_cost_weight,
+        endpoint_snap_max_distance_m=endpoint_snap_max_distance_m,
     )
 
 
-def follow_path(chassis, path):
+def follow_path(
+    chassis,
+    path,
+    stop_event=None,
+    status_callback=None,
+    enable_navigation_feedback=ENABLE_VIDEO_FEEDBACK,
+    control_interval_sec=CONTROL_INTERVAL_SEC,
+    waypoint_reached_distance_m=WAYPOINT_REACHED_DISTANCE_M,
+    destination_reached_distance_m=DESTINATION_REACHED_DISTANCE_M,
+    waypoint_timeout_sec=WAYPOINT_TIMEOUT_SEC,
+    route_timeout_sec=ROUTE_TIMEOUT_SEC,
+    log_interval_sec=LOG_INTERVAL_SEC,
+):
     route_started_at = time.monotonic()
 
     for waypoint_index, waypoint in enumerate(path):
+        _raise_if_stopped(chassis, stop_event)
         waypoint_xy = waypoint_to_xy(waypoint)
         is_destination = waypoint_index == len(path) - 1
         tolerance_m = (
-            DESTINATION_REACHED_DISTANCE_M
+            destination_reached_distance_m
             if is_destination
-            else WAYPOINT_REACHED_DISTANCE_M
+            else waypoint_reached_distance_m
         )
 
         drive_to_waypoint(
@@ -117,6 +169,13 @@ def follow_path(chassis, path):
             len(path),
             tolerance_m,
             route_started_at,
+            stop_event=stop_event,
+            status_callback=status_callback,
+            enable_navigation_feedback=enable_navigation_feedback,
+            control_interval_sec=control_interval_sec,
+            waypoint_timeout_sec=waypoint_timeout_sec,
+            route_timeout_sec=route_timeout_sec,
+            log_interval_sec=log_interval_sec,
         )
 
 
@@ -127,11 +186,19 @@ def drive_to_waypoint(
     waypoint_count,
     tolerance_m,
     route_started_at,
+    stop_event=None,
+    status_callback=None,
+    enable_navigation_feedback=ENABLE_VIDEO_FEEDBACK,
+    control_interval_sec=CONTROL_INTERVAL_SEC,
+    waypoint_timeout_sec=WAYPOINT_TIMEOUT_SEC,
+    route_timeout_sec=ROUTE_TIMEOUT_SEC,
+    log_interval_sec=LOG_INTERVAL_SEC,
 ):
     waypoint_started_at = time.monotonic()
     last_log_at = 0.0
 
     while True:
+        _raise_if_stopped(chassis, stop_event)
         now = time.monotonic()
         chassis.update_position()
         waypoint_distance_m = distance_to(chassis, waypoint_xy)
@@ -143,20 +210,32 @@ def drive_to_waypoint(
             )
             return
 
-        target_xy = apply_navigation_feedback(chassis, waypoint_xy, waypoint_index)
+        target_xy = waypoint_xy
+        if enable_navigation_feedback:
+            target_xy = apply_navigation_feedback(chassis, waypoint_xy, waypoint_index)
 
-        if WAYPOINT_TIMEOUT_SEC is not None:
-            if now - waypoint_started_at > WAYPOINT_TIMEOUT_SEC:
+        _report_status(
+            status_callback,
+            chassis,
+            waypoint_xy,
+            target_xy,
+            waypoint_index,
+            waypoint_count,
+            waypoint_distance_m,
+        )
+
+        if waypoint_timeout_sec is not None:
+            if now - waypoint_started_at > waypoint_timeout_sec:
                 raise TimeoutError(
                     f"Timed out driving to waypoint {waypoint_index + 1}/"
                     f"{waypoint_count}"
                 )
 
-        if ROUTE_TIMEOUT_SEC is not None:
-            if now - route_started_at > ROUTE_TIMEOUT_SEC:
+        if route_timeout_sec is not None:
+            if now - route_started_at > route_timeout_sec:
                 raise TimeoutError("Timed out driving the planned route")
 
-        if now - last_log_at >= LOG_INTERVAL_SEC:
+        if now - last_log_at >= log_interval_sec:
             x, y, heading = chassis.get_position()
             print(
                 f"Waypoint {waypoint_index + 1}/{waypoint_count}: "
@@ -168,7 +247,7 @@ def drive_to_waypoint(
 
         chassis.set_wanted_position(target_xy)
         chassis.drive_to_wanted_position()
-        time.sleep(CONTROL_INTERVAL_SEC)
+        time.sleep(control_interval_sec)
 
 
 def apply_navigation_feedback(chassis, waypoint_xy, waypoint_index):
@@ -215,7 +294,12 @@ def _get_navigation_camera():
 
     if _navigation_camera is None:
         try:
-            _navigation_camera = Camera()
+            _navigation_camera = Camera(
+                camera_uri=CAMERA_URI,
+                input_width=CAMERA_INPUT_WIDTH,
+                input_height=CAMERA_INPUT_HEIGHT,
+                input_rate=CAMERA_INPUT_RATE,
+            )
         except Exception as exc:
             _mark_navigation_camera_unavailable(
                 f"Video feedback unavailable, using waypoint navigation only: {exc}"
@@ -320,6 +404,36 @@ def waypoint_to_xy(waypoint):
 def distance_to(chassis, target_xy):
     x, y = current_xy(chassis)
     return math.hypot(target_xy[0] - x, target_xy[1] - y)
+
+
+def _raise_if_stopped(chassis, stop_event):
+    if stop_event is not None and stop_event.is_set():
+        chassis.stop()
+        raise NavigationStopped("Navigation stopped")
+
+
+def _report_status(
+    status_callback,
+    chassis,
+    waypoint_xy,
+    target_xy,
+    waypoint_index,
+    waypoint_count,
+    remaining_m,
+):
+    if status_callback is None:
+        return
+
+    status_callback(
+        {
+            "position": chassis.get_position(),
+            "waypoint_xy": waypoint_xy,
+            "target_xy": target_xy,
+            "waypoint_index": waypoint_index,
+            "waypoint_count": waypoint_count,
+            "remaining_m": remaining_m,
+        }
+    )
 
 
 def _clamp(value, low, high):
