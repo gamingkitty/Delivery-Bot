@@ -178,13 +178,11 @@ def plan_path(
 
     max_map_distance_m = _require_positive(max_map_distance_m, "max_map_distance_m")
     grid_resolution_m = _require_positive(grid_resolution_m, "grid_resolution_m")
-    endpoint_snap_max_distance_m = min(
-        _require_nonnegative(
+    endpoint_snap_max_distance_m = _require_nonnegative(
             endpoint_snap_max_distance_m,
             "endpoint_snap_max_distance_m",
-        ),
-        max_map_distance_m,
-    )
+        )
+
     grid = build_navigation_grid(
         point_map,
         max_map_distance_m=max_map_distance_m,

@@ -6,7 +6,7 @@ from hardware.gps import GPS
 from hardware.imu import IMU
 
 
-ANGLE_KP = -3.0
+ANGLE_KP = 3.0
 
 
 class Chassis:
@@ -64,6 +64,10 @@ class Chassis:
         if num_gps_pos:
             initial_pos_x /= num_gps_pos
             initial_pos_y /= num_gps_pos
+
+        print(f"Old initial pos: {initial_pos_x}, {initial_pos_y}")
+        initial_pos_x = 19889.248
+        initial_pos_y = 9556.407
 
         self.left_motor_position = left_motor.read_position_degrees()
         self.right_motor_position = right_motor.read_position_degrees()

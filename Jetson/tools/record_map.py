@@ -14,7 +14,7 @@ from robot import CONTROL_INTERVAL_SEC, controller_velocity, create_chassis
 from teleop.controller import Controller
 
 
-DEFAULT_MAP_PATH = JETSON_ROOT / "maps" / "driveable_points.json"
+DEFAULT_MAP_PATH = JETSON_ROOT / "maps" / "overlake_campus_map.json"
 
 
 def parse_args():
@@ -115,6 +115,7 @@ def main():
                             chassis.set_wanted_angle(chassis.get_position()[2])
 
                     forward, turn = controller_velocity(controller)
+                    forward *= 1.5
                     if correct_heading:
                         turn = None
                     chassis.set_velocity(forward, turn)

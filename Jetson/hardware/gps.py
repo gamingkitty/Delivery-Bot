@@ -41,7 +41,8 @@ class GPS:
         if waiting <= 0:
             return False
 
-        self._buffer += self.serial.read(waiting).decode("ascii", errors="ignore")
+        data = self.serial.read(waiting).decode("ascii", errors="ignore")
+        self._buffer += data.replace("\r", "\n")
         updated = False
 
         while "\n" in self._buffer:
@@ -61,14 +62,31 @@ class GPS:
             4738.6403,N -> 47.644005
             12209.9010,W -> -122.1650166667
         """
+        if value is None or direction is None:
+            return None
+
         if value == "" or direction == "":
             return None
 
-        value = float(value)
-        direction = direction.strip().upper()
+        value = str(value).strip()
+        direction = str(direction).strip().upper()
+
+        if direction not in ("N", "S", "E", "W"):
+            return None
+
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            return None
+
+        if not math.isfinite(value):
+            return None
 
         degrees = int(value // 100)
         minutes = value - degrees * 100
+
+        if minutes >= 60.0:
+            return None
 
         decimal = degrees + minutes / 60.0
 
@@ -81,6 +99,9 @@ class GPS:
         self.last_raw_line = line
 
         if not line.startswith("$"):
+            return False
+
+        if "$" in line[1:]:
             return False
 
         # Remove checksum part after *

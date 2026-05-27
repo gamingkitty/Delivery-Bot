@@ -1,4 +1,5 @@
 import os
+import subprocess
 import tempfile
 import threading
 from dataclasses import dataclass
@@ -37,6 +38,8 @@ class Camera:
         input_width: int = 640,
         input_height: int = 480,
         input_rate: int = 15,
+        input_flip: Optional[str] = None,
+        v4l2_controls: Optional[dict] = None,
         trail_threshold: int = 120,
         obstacle_threshold: int = 120,
     ):
@@ -46,6 +49,8 @@ class Camera:
         self.input_width = int(input_width)
         self.input_height = int(input_height)
         self.input_rate = int(input_rate)
+        self.input_flip = input_flip
+        self.v4l2_controls = dict(v4l2_controls or {})
         self.trail_threshold = int(trail_threshold)
         self.obstacle_threshold = int(obstacle_threshold)
 
@@ -64,6 +69,7 @@ class Camera:
             if self.deepscene_enabled:
                 self.colors_file = self._make_runtime_colors_file()
                 self.net = self._create_deepscene_model()
+            self._apply_v4l2_controls()
             self.source = self._create_video_source()
         except Exception:
             self.close()
@@ -180,14 +186,47 @@ class Camera:
         )
 
     def _create_video_source(self):
-        return self.jetson_utils.videoSource(
-            self.camera_uri,
-            argv=[
-                f"--input-width={self.input_width}",
-                f"--input-height={self.input_height}",
-                f"--input-rate={self.input_rate}",
-            ],
-        )
+        argv = [
+            f"--input-width={self.input_width}",
+            f"--input-height={self.input_height}",
+            f"--input-rate={self.input_rate}",
+        ]
+
+        if self.input_flip:
+            argv.append(f"--input-flip={self.input_flip}")
+
+        return self.jetson_utils.videoSource(self.camera_uri, argv=argv)
+
+    def _apply_v4l2_controls(self):
+        if not self.v4l2_controls:
+            return
+
+        if not self.camera_uri.startswith("/dev/video"):
+            return
+
+        for name, value in self.v4l2_controls.items():
+            if value is None:
+                continue
+
+            try:
+                subprocess.run(
+                    [
+                        "v4l2-ctl",
+                        "--device",
+                        self.camera_uri,
+                        "--set-ctrl",
+                        f"{name}={value}",
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except FileNotFoundError:
+                print("Camera V4L2 controls skipped: v4l2-ctl is not installed")
+                return
+            except subprocess.CalledProcessError as exc:
+                message = (exc.stderr or exc.stdout or str(exc)).strip()
+                print(f"Camera V4L2 control skipped: {name}={value}: {message}")
 
     def _make_runtime_colors_file(self):
         """

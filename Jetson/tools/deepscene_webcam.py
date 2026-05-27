@@ -12,6 +12,14 @@ if str(JETSON_ROOT) not in sys.path:
     sys.path.insert(0, str(JETSON_ROOT))
 
 from hardware.camera import Camera
+from config import (
+    CAMERA_INPUT_FLIP,
+    CAMERA_INPUT_HEIGHT,
+    CAMERA_INPUT_RATE,
+    CAMERA_INPUT_WIDTH,
+    CAMERA_URI,
+    CAMERA_V4L2_CONTROLS,
+)
 
 
 app = Flask(__name__)
@@ -63,7 +71,14 @@ def video():
 
 def main():
     global camera
-    camera = Camera()
+    camera = Camera(
+        camera_uri=CAMERA_URI,
+        input_width=CAMERA_INPUT_WIDTH,
+        input_height=CAMERA_INPUT_HEIGHT,
+        input_rate=CAMERA_INPUT_RATE,
+        input_flip=CAMERA_INPUT_FLIP,
+        v4l2_controls=CAMERA_V4L2_CONTROLS,
+    )
 
     try:
         app.run(host="0.0.0.0", port=5000, threaded=True)

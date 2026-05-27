@@ -1,7 +1,7 @@
 {
   "server": {
     "host": "0.0.0.0",
-    "port": 8000,
+    "port": 8001,
     "debug": false
   },
   "auth": {
@@ -30,8 +30,8 @@
     {
       "id": "library",
       "name": "Library",
-      "lat": 47.693087,
-      "lon": -122.069801,
+      "lat": 47.6925793632,
+      "lon": -122.0696872767,
       "description": "Main library entrance",
       "enabled": true
     },

@@ -14,8 +14,10 @@ class IMU:
     """
     Read the bot heading from the BNO055 connected to the Arduino Nano I2C bus.
 
-    The Arduino reports the BNO055 Euler heading in degrees. A zero offset can
-    be applied when the current heading should be treated as 0 degrees.
+    The Arduino reports the BNO055 Euler heading in degrees, where clockwise
+    turns increase the angle. Navigation uses map headings where
+    counterclockwise turns increase the angle, so get_angle converts the raw
+    heading into that convention after applying the zero offset.
     """
 
     def __init__(self, arduino: ArduinoIO, zero_on_start: bool = False):
@@ -30,8 +32,8 @@ class IMU:
         return self._normalize_angle(self.arduino.imu_angle_read())
 
     def get_angle(self) -> float:
-        """Return the current heading in degrees after applying the zero offset."""
-        return self._normalize_angle(self.read_angle() - self.zero_offset)
+        """Return the navigation heading in degrees after applying the zero offset."""
+        return self._normalize_angle(self.zero_offset - self.read_angle())
 
     def zero(
         self,

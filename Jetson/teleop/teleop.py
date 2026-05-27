@@ -32,6 +32,7 @@ def main():
             while True:
                 if controller.update():
                     chassis.update_position()
+                    print(chassis.get_position())
                     if controller.get_button_down("CROSS"):
                         correct_heading = not correct_heading
                         if correct_heading:

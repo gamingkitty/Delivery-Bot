@@ -13,10 +13,12 @@ from config import (
     ARDUINO_PORT,
     CAMERA_DEBUG_STREAM_ENABLED,
     CAMERA_DEEPSCENE_ENABLED,
+    CAMERA_INPUT_FLIP,
     CAMERA_INPUT_HEIGHT,
     CAMERA_INPUT_RATE,
     CAMERA_INPUT_WIDTH,
     CAMERA_URI,
+    CAMERA_V4L2_CONTROLS,
     GPS_ORIGIN,
     GPS_PORT,
     MAX_FORWARD_CM_PER_SEC,
@@ -605,6 +607,8 @@ class DebugCameraStreamer:
                 input_width=CAMERA_INPUT_WIDTH,
                 input_height=CAMERA_INPUT_HEIGHT,
                 input_rate=CAMERA_INPUT_RATE,
+                input_flip=CAMERA_INPUT_FLIP,
+                v4l2_controls=CAMERA_V4L2_CONTROLS,
             )
             self._log(
                 "Started debug camera stream"

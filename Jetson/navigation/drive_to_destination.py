@@ -10,10 +10,12 @@ if str(JETSON_ROOT) not in sys.path:
 
 from config import (
     ARDUINO_PORT,
+    CAMERA_INPUT_FLIP,
     CAMERA_INPUT_HEIGHT,
     CAMERA_INPUT_RATE,
     CAMERA_INPUT_WIDTH,
     CAMERA_URI,
+    CAMERA_V4L2_CONTROLS,
     GPS_PORT,
     NAV_CLEARANCE_COST_WEIGHT,
     NAV_CONTROL_INTERVAL_SEC,
@@ -299,6 +301,8 @@ def _get_navigation_camera():
                 input_width=CAMERA_INPUT_WIDTH,
                 input_height=CAMERA_INPUT_HEIGHT,
                 input_rate=CAMERA_INPUT_RATE,
+                input_flip=CAMERA_INPUT_FLIP,
+                v4l2_controls=CAMERA_V4L2_CONTROLS,
             )
         except Exception as exc:
             _mark_navigation_camera_unavailable(
