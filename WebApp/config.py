@@ -35,6 +35,10 @@ def load_config(path=None):
 
     _require_point(map_config, "top_left")
     _require_point(map_config, "bottom_right")
+    if "navigation_origin" in map_config:
+        _require_point(map_config, "navigation_origin")
+    else:
+        map_config["navigation_origin"] = _default_navigation_origin()
 
     if map_config["top_left"]["lat"] == map_config["bottom_right"]["lat"]:
         raise ConfigError("Map top_left.lat and bottom_right.lat cannot match")
@@ -62,6 +66,9 @@ def public_config(config):
             "image_url": "/api/map-image",
             "top_left": _public_point(config["map"]["top_left"]),
             "bottom_right": _public_point(config["map"]["bottom_right"]),
+            "navigation_origin": _public_point(
+                config["map"].get("navigation_origin", _default_navigation_origin())
+            ),
         },
         "stops": [
             public_stop(stop)
@@ -171,4 +178,14 @@ def _public_point(point):
     return {
         "lat": float(point["lat"]),
         "lon": float(point["lon"]),
+    }
+
+
+def _default_navigation_origin():
+    from Jetson.config import GPS_ORIGIN
+
+    lat, lon = GPS_ORIGIN
+    return {
+        "lat": float(lat),
+        "lon": float(lon),
     }

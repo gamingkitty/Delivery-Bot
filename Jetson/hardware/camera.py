@@ -218,8 +218,9 @@ class Camera:
                         f"{name}={value}",
                     ],
                     check=True,
-                    capture_output=True,
-                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    universal_newlines=True,
                 )
             except FileNotFoundError:
                 print("Camera V4L2 controls skipped: v4l2-ctl is not installed")

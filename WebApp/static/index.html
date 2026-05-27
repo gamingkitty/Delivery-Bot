@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Delivery Bot Dispatch</title>
-    <link rel="stylesheet" href="/static/styles.css">
+    <link rel="stylesheet" href="/static/styles.css?v=map-editor-4">
   </head>
   <body>
     <main class="app-shell">
@@ -13,6 +13,11 @@
           <img id="campusMap" alt="Campus map">
           <svg id="routeLayer" class="route-layer" viewBox="0 0 100 100" preserveAspectRatio="none">
             <polyline id="plannedRoute" points=""></polyline>
+          </svg>
+          <svg id="mapEditorLayer" class="map-editor-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            <g id="mapEditorLines"></g>
+            <line id="mapEditorPreview" class="map-editor-preview"></line>
+            <g id="mapEditorPoints"></g>
           </svg>
           <div id="robotMarker" class="marker robot" title="Robot"></div>
           <div id="destinationMarker" class="marker destination" title="Destination"></div>
@@ -70,6 +75,29 @@
 
         <section id="debugPanel" class="debug-panel" hidden>
           <div id="debugError" class="debug-error" hidden></div>
+          <section class="panel-section map-editor-panel" aria-label="Point cloud map editor">
+            <div class="section-heading">
+              <h2>Point Cloud Map</h2>
+              <span id="mapEditorPointCount" class="count-pill">0 points</span>
+            </div>
+
+            <div class="tool-row">
+              <button id="mapEditorDrawButton" type="button" aria-pressed="false">Draw</button>
+              <button id="mapEditorNewLineButton" type="button" class="secondary">New Line</button>
+              <button id="mapEditorUndoButton" type="button" class="secondary">Undo</button>
+              <button id="mapEditorClearButton" type="button" class="danger">Clear</button>
+            </div>
+
+            <div class="editor-input-grid">
+              <label for="mapEditorSpacing">Point spacing (m)</label>
+              <input id="mapEditorSpacing" type="number" min="0.05" max="5" step="0.05" value="0.25">
+
+              <label for="mapEditorSnapRadius">Snap radius (px)</label>
+              <input id="mapEditorSnapRadius" type="number" min="2" max="80" step="1" value="18">
+            </div>
+
+            <button id="mapEditorDownloadButton" type="button" class="primary">Download Point Cloud</button>
+          </section>
           <div class="debug-grid">
             <div>
               <h2>Camera</h2>
@@ -91,6 +119,6 @@
       </aside>
     </main>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=map-editor-4"></script>
   </body>
 </html>

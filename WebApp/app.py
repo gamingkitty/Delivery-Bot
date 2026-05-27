@@ -38,11 +38,11 @@ def create_app(config_path=None, controller=None, config=None):
 
     @app.route("/")
     def index():
-        return send_from_directory(app.static_folder, "index.html")
+        return _no_store(send_from_directory(app.static_folder, "index.html"))
 
     @app.route("/api/config/public")
     def api_public_config():
-        return jsonify(public_config(config))
+        return _no_store(jsonify(public_config(config)))
 
     @app.route("/api/map-image")
     def api_map_image():
@@ -152,6 +152,10 @@ def create_app(config_path=None, controller=None, config=None):
             stream_factory(),
             mimetype="multipart/x-mixed-replace; boundary=frame",
         )
+
+    def _no_store(response):
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.teardown_appcontext
     def _shutdown_on_teardown(_exception=None):

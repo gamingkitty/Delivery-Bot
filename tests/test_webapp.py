@@ -6,6 +6,7 @@ from pathlib import Path
 from WebApp.app import create_app
 from WebApp.config import load_config, public_config
 from WebApp.geo import latlon_to_map_percent
+from Jetson.config import GPS_ORIGIN
 from Jetson.navigation.coordinates import latlon_to_xy, xy_to_latlon
 
 
@@ -35,6 +36,8 @@ class WebAppTests(unittest.TestCase):
         self.assertIn("stops", public)
         self.assertNotIn("auth", public)
         self.assertNotIn("user_pin", json.dumps(public))
+        self.assertEqual(public["map"]["navigation_origin"]["lat"], GPS_ORIGIN[0])
+        self.assertEqual(public["map"]["navigation_origin"]["lon"], GPS_ORIGIN[1])
         self.assertEqual(len(public["stops"]), 1)
 
     def test_api_rejects_bad_pin_and_accepts_valid_job(self):
