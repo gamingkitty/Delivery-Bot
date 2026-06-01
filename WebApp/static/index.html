@@ -20,6 +20,7 @@
             <g id="mapEditorPoints"></g>
           </svg>
           <div id="robotMarker" class="marker robot" title="Robot"></div>
+          <div id="rawGpsMarker" class="marker raw-gps" title="Raw GPS"></div>
           <div id="destinationMarker" class="marker destination" title="Destination"></div>
         </div>
       </section>
@@ -98,6 +99,30 @@
 
             <button id="mapEditorDownloadButton" type="button" class="primary">Download Point Cloud</button>
           </section>
+          <section class="panel-section bend-panel" aria-label="Bend guidance">
+            <div class="section-heading">
+              <h2>Bend Guidance</h2>
+              <span id="bendDetectedPill" class="count-pill">No bend</span>
+            </div>
+            <div class="status-grid bend-grid">
+              <div>
+                <span>Current bend</span>
+                <strong id="bendDirectionText">None</strong>
+              </div>
+              <div>
+                <span>Base heading</span>
+                <strong id="bendBaseHeadingText">-</strong>
+              </div>
+              <div>
+                <span>Trail hint</span>
+                <strong id="bendTrailHintText">-</strong>
+              </div>
+              <div>
+                <span>Command</span>
+                <strong id="bendCommandText">-</strong>
+              </div>
+            </div>
+          </section>
           <div class="debug-grid">
             <div>
               <h2>Camera</h2>
@@ -119,6 +144,6 @@
       </aside>
     </main>
 
-    <script src="/static/app.js?v=map-editor-4"></script>
+    <script src="/static/app.js?v=raw-gps-bend-1"></script>
   </body>
 </html>

@@ -1,4 +1,5 @@
 import atexit
+import logging
 from pathlib import Path
 
 from flask import (
@@ -178,6 +179,7 @@ def run_app(app):
     config = app.config["DELIVERY_CONFIG"]
     controller = app.config["ROBOT_CONTROLLER"]
     atexit.register(controller.shutdown)
+    _quiet_request_logs()
 
     try:
         app.run(
@@ -188,6 +190,10 @@ def run_app(app):
         )
     finally:
         controller.shutdown()
+
+
+def _quiet_request_logs():
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
 
 if __name__ == "__main__":

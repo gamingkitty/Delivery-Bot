@@ -4,6 +4,7 @@ import time
 from drive.motor import Motor
 from hardware.gps import GPS
 from hardware.imu import IMU
+from navigation.point_cloud import PointMapSnapper
 
 
 ANGLE_KP = 3.0
@@ -30,6 +31,10 @@ class Chassis:
         angle_kp: float = ANGLE_KP,
         drive_kp: float = 50,
         max_turn_deg_per_sec: float = None,
+        gps_snap_enabled: bool = True,
+        gps_snap_point_map=None,
+        gps_snap_max_distance_m: float = None,
+        gps_snap_map_tolerance_m: float = 0.0,
     ):
         self.wheel_diameter_cm = float(wheel_diameter_cm)
         self.track_width_cm = float(track_width_cm)
@@ -43,6 +48,21 @@ class Chassis:
         self.max_turn_deg_per_sec = (
             None if max_turn_deg_per_sec is None else abs(float(max_turn_deg_per_sec))
         )
+        self.gps_snapper = (
+            PointMapSnapper(gps_snap_point_map)
+            if gps_snap_enabled and gps_snap_point_map is not None
+            else None
+        )
+        self.gps_snap_max_distance_m = (
+            None
+            if gps_snap_max_distance_m is None
+            else max(0.0, float(gps_snap_max_distance_m))
+        )
+        self.gps_snap_map_tolerance_m = max(0.0, float(gps_snap_map_tolerance_m))
+        self.gps_snap_heading_weight_m = 6.0
+        self.gps_snap_heading_max_error_deg = 60.0
+        self.video_drive_heading_window_sec = 4.0
+        self.video_drive_heading_samples = []
 
         initial_pos_x = 0
         initial_pos_y = 0
@@ -64,10 +84,18 @@ class Chassis:
         if num_gps_pos:
             initial_pos_x /= num_gps_pos
             initial_pos_y /= num_gps_pos
+            initial_pos_x, initial_pos_y = self._snap_xy_to_point_map(
+                initial_pos_x,
+                initial_pos_y,
+            )
 
         print(f"Old initial pos: {initial_pos_x}, {initial_pos_y}")
-        initial_pos_x = 19889.248
-        initial_pos_y = 9556.407
+        # self.offset_x = 19892.513 - initial_pos_x
+        # self.offset_y = 9533.847 - initial_pos_y
+        self.offset_x = 0
+        self.offset_y = 0
+        # initial_pos_x = 19892.513
+        # initial_pos_y = 9533.847
 
         self.left_motor_position = left_motor.read_position_degrees()
         self.right_motor_position = right_motor.read_position_degrees()
@@ -75,15 +103,19 @@ class Chassis:
         # X: Meters, Y: Meters, Heading: Degrees
         # Assumes robot is initially facing east.
         self.position = (initial_pos_x, initial_pos_y, 0)
+        self.raw_gps_position = None
         self.wanted_position = None
 
         # Can replace these later with a full kalman filter
         self.odom_uncertainty_m = 1.0
 
-        self.gps_uncertainty_m = 4.0
-        self.odom_error_per_meter = 0.06
-        self.min_gps_weight = 0.03
+        self.gps_uncertainty_m = 8.0
+        self.odom_error_per_meter = 0.05
+        self.min_gps_weight = 0.02
         self.max_gps_weight = 0.35
+        self.gps_recovery_distance_m = 2.0
+        self.gps_recovery_margin_m = 1.0
+        self.gps_recovery_weight = 0.65
 
         if self.wheel_diameter_cm <= 0:
             raise ValueError("wheel_diameter_cm must be positive")
@@ -97,6 +129,14 @@ class Chassis:
     def update_position(self):
         gps_updated = self.gps.update()
         gps_pos = self.gps.get_position_meters()
+        self.raw_gps_position = (
+            None
+            if gps_pos is None
+            else (float(gps_pos[0]), float(gps_pos[1]))
+        )
+
+        if gps_pos is not None:
+            gps_pos = (gps_pos[0] + self.offset_x, gps_pos[1] + self.offset_y)
 
         new_left_pos = self.left_motor.read_position_degrees()
         new_right_pos = self.right_motor.read_position_degrees()
@@ -125,18 +165,29 @@ class Chassis:
         # Odometry gets less trustworthy as you drive farther.
         self.odom_uncertainty_m += abs(distance_m) * self.odom_error_per_meter
 
+        gps_recovery = None
+
         if gps_pos is not None and gps_updated:
             gps_x, gps_y = gps_pos
+            gps_recovery = self._gps_recovery_correction(
+                gps_x,
+                gps_y,
+                new_heading,
+            )
 
             # Ignore GPS if it jumps insanely far from odometry.
             gps_error = math.hypot(gps_x - odom_x, gps_y - odom_y)
 
-            if gps_error < 15.0:
+            if True: #gps_error < 40.0:
                 gps_weight = self.odom_uncertainty_m / (
                         self.odom_uncertainty_m + self.gps_uncertainty_m
                 )
 
                 gps_weight = max(self.min_gps_weight, min(self.max_gps_weight, gps_weight))
+                gps_weight = max(
+                    gps_weight,
+                    0.0 if gps_recovery is None else gps_recovery["weight"],
+                )
 
                 x = odom_x * (1.0 - gps_weight) + gps_x * gps_weight
                 y = odom_y * (1.0 - gps_weight) + gps_y * gps_weight
@@ -150,10 +201,28 @@ class Chassis:
             x = odom_x
             y = odom_y
 
+        snapped_x, snapped_y = self._snap_xy_to_point_map(
+            x,
+            y,
+            heading_deg=new_heading,
+        )
+
+        if gps_recovery is not None and self._snap_still_stuck(
+            snapped_x,
+            snapped_y,
+            gps_recovery,
+        ):
+            x, y = gps_recovery["snap_xy"]
+        else:
+            x, y = snapped_x, snapped_y
+
         self.position = (x, y, new_heading)
 
     def get_position(self):
         return self.position
+
+    def get_raw_gps_position(self):
+        return self.raw_gps_position
 
     def set_wanted_position(self, position):
         self.wanted_position = position
@@ -219,6 +288,56 @@ class Chassis:
     def stop(self):
         self.left_motor.set_velocity_pair(self.right_motor, 0.0, 0.0)
 
+    def record_video_drive_heading(self, heading_deg=None, now=None):
+        now = time.monotonic() if now is None else float(now)
+
+        if heading_deg is None:
+            heading_deg = self.position[2]
+
+        samples = getattr(self, "video_drive_heading_samples", None)
+
+        if samples is None:
+            samples = []
+            self.video_drive_heading_samples = samples
+
+        samples.append((now, self._normalize_angle(heading_deg)))
+        self._trim_video_drive_heading_samples(now)
+
+    def _video_drive_heading(self, now=None):
+        now = time.monotonic() if now is None else float(now)
+        samples = self._trim_video_drive_heading_samples(now)
+
+        if not samples:
+            return None
+
+        sin_sum = sum(math.sin(math.radians(heading)) for _time, heading in samples)
+        cos_sum = sum(math.cos(math.radians(heading)) for _time, heading in samples)
+
+        if sin_sum == 0.0 and cos_sum == 0.0:
+            return None
+
+        return self._normalize_angle(math.degrees(math.atan2(sin_sum, cos_sum)))
+
+    def _trim_video_drive_heading_samples(self, now=None):
+        now = time.monotonic() if now is None else float(now)
+        samples = getattr(self, "video_drive_heading_samples", None)
+
+        if samples is None:
+            samples = []
+            self.video_drive_heading_samples = samples
+
+        window_sec = max(
+            0.0,
+            float(getattr(self, "video_drive_heading_window_sec", 4.0)),
+        )
+        cutoff = now - window_sec
+        samples[:] = [
+            (sample_time, heading)
+            for sample_time, heading in samples
+            if sample_time >= cutoff
+        ]
+        return samples
+
     def _wheel_linear_to_motor_deg(self, wheel_cm_per_sec: float) -> float:
         return wheel_cm_per_sec * self._wheel_degrees_per_cm
 
@@ -233,3 +352,96 @@ class Chassis:
     @staticmethod
     def _clamp(value: float, low: float, high: float) -> float:
         return max(low, min(high, float(value)))
+
+    def _gps_recovery_correction(self, gps_x: float, gps_y: float, heading_deg: float):
+        if self.gps_snapper is None:
+            return None
+
+        result = self.gps_snapper.nearest(
+            gps_x,
+            gps_y,
+            self.gps_snap_max_distance_m,
+            heading_deg=heading_deg,
+            heading_weight_m=getattr(self, "gps_snap_heading_weight_m", 6.0),
+            heading_max_error_deg=getattr(
+                self,
+                "gps_snap_heading_max_error_deg",
+                60.0,
+            ),
+        )
+
+        if result is None:
+            return None
+
+        candidate_x, candidate_y, gps_candidate_distance_m = result
+        current_x, current_y, _current_heading = self.position
+        current_to_candidate_m = math.hypot(
+            candidate_x - current_x,
+            candidate_y - current_y,
+        )
+        current_to_gps_m = math.hypot(gps_x - current_x, gps_y - current_y)
+        recovery_distance_m = max(
+            float(getattr(self, "gps_recovery_distance_m", 2.0)),
+            self.gps_snap_map_tolerance_m * 2.0,
+        )
+        recovery_margin_m = max(
+            0.0,
+            float(getattr(self, "gps_recovery_margin_m", 1.0)),
+        )
+
+        if current_to_candidate_m < recovery_distance_m:
+            return None
+
+        if current_to_gps_m <= gps_candidate_distance_m + recovery_margin_m:
+            return None
+
+        weight = self._clamp(
+            getattr(self, "gps_recovery_weight", 0.65),
+            self.min_gps_weight,
+            1.0,
+        )
+        snap_xy = self._snap_xy_to_point_map(
+            gps_x,
+            gps_y,
+            heading_deg=heading_deg,
+        )
+        return {
+            "candidate_xy": (candidate_x, candidate_y),
+            "snap_xy": snap_xy,
+            "weight": weight,
+        }
+
+    def _snap_still_stuck(self, snapped_x, snapped_y, gps_recovery):
+        candidate_x, candidate_y = gps_recovery["candidate_xy"]
+        snap_to_candidate_m = math.hypot(
+            candidate_x - float(snapped_x),
+            candidate_y - float(snapped_y),
+        )
+        tolerance_m = max(
+            self.gps_snap_map_tolerance_m,
+            float(getattr(self, "gps_recovery_margin_m", 1.0)),
+        )
+        return snap_to_candidate_m > tolerance_m
+
+    def _snap_xy_to_point_map(self, x: float, y: float, heading_deg=None):
+        if self.gps_snapper is None:
+            return float(x), float(y)
+
+        snap_heading = heading_deg
+
+        if snap_heading is None:
+            snap_heading = self._video_drive_heading()
+
+        return self.gps_snapper.constrain(
+            x,
+            y,
+            self.gps_snap_max_distance_m,
+            self.gps_snap_map_tolerance_m,
+            heading_deg=snap_heading,
+            heading_weight_m=getattr(self, "gps_snap_heading_weight_m", 6.0),
+            heading_max_error_deg=getattr(
+                self,
+                "gps_snap_heading_max_error_deg",
+                60.0,
+            ),
+        )

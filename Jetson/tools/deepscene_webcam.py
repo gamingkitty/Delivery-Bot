@@ -13,6 +13,7 @@ if str(JETSON_ROOT) not in sys.path:
 
 from hardware.camera import Camera
 from config import (
+    CAMERA_AUTO_EXPOSURE,
     CAMERA_INPUT_FLIP,
     CAMERA_INPUT_HEIGHT,
     CAMERA_INPUT_RATE,
@@ -78,6 +79,7 @@ def main():
         input_rate=CAMERA_INPUT_RATE,
         input_flip=CAMERA_INPUT_FLIP,
         v4l2_controls=CAMERA_V4L2_CONTROLS,
+        auto_exposure=CAMERA_AUTO_EXPOSURE,
     )
 
     try:

@@ -11,6 +11,7 @@ if str(JETSON_ROOT) not in sys.path:
 
 from config import (
     ARDUINO_PORT,
+    CAMERA_AUTO_EXPOSURE,
     CAMERA_DEBUG_STREAM_ENABLED,
     CAMERA_DEEPSCENE_ENABLED,
     CAMERA_INPUT_FLIP,
@@ -29,6 +30,9 @@ from config import (
     NAV_ENDPOINT_SNAP_MAX_DISTANCE_M,
     NAV_ENABLE_VIDEO_FEEDBACK,
     NAV_GRID_RESOLUTION_M,
+    NAV_GPS_SNAP_ENABLED,
+    NAV_GPS_SNAP_MAP_TOLERANCE_M,
+    NAV_GPS_SNAP_MAX_DISTANCE_M,
     NAV_LOG_INTERVAL_SEC,
     NAV_MAP_PATH,
     NAV_MAX_MAP_DISTANCE_M,
@@ -38,7 +42,7 @@ from config import (
     ZERO_IMU_ON_START,
 )
 from hardware.arduino_io import ArduinoIO
-from hardware.camera import Camera
+from hardware.camera import acquire_shared_camera
 from navigation.coordinates import latlon_to_xy, path_xy_to_latlon, xy_to_latlon
 from navigation.drive_to_destination import (
     NavigationStopped,
@@ -95,6 +99,7 @@ class DeliveryRobotService:
         self.chassis = None
         self.gps = None
         self.imu = None
+        self.point_map = None
         self._debug_camera_streamer = None
         self._debug_camera_lock = threading.Lock()
         self.manual_stop_timer = None
@@ -112,11 +117,21 @@ class DeliveryRobotService:
                 "y_m": None,
                 "heading_deg": None,
             },
+            "raw_gps": {
+                "lat": None,
+                "lon": None,
+                "x_m": None,
+                "y_m": None,
+            },
             "destination": None,
             "planned_path": [],
             "active_waypoint_index": None,
             "progress": 0.0,
             "remaining_m": None,
+            "drive_mode": None,
+            "video_feedback_offset": None,
+            "route_error_deg": None,
+            "navigation_bend": None,
             "manual_direction": None,
             "last_error": None,
             "updated_at": time.time(),
@@ -158,6 +173,10 @@ class DeliveryRobotService:
                 active_waypoint_index=None,
                 progress=0.0,
                 remaining_m=None,
+                drive_mode=None,
+                video_feedback_offset=None,
+                route_error_deg=None,
+                navigation_bend=None,
                 manual_direction=None,
                 last_error=None,
             )
@@ -179,6 +198,10 @@ class DeliveryRobotService:
             state=STATE_STOPPED,
             message=reason,
             manual_direction=None,
+            drive_mode=None,
+            video_feedback_offset=None,
+            route_error_deg=None,
+            navigation_bend=None,
         )
         self._log_event(reason)
 
@@ -261,6 +284,10 @@ class DeliveryRobotService:
                 active_waypoint_index=None,
                 progress=0.0,
                 remaining_m=None,
+                drive_mode=None,
+                video_feedback_offset=None,
+                route_error_deg=None,
+                navigation_bend=None,
                 manual_direction=direction,
                 last_error=None,
             )
@@ -288,6 +315,7 @@ class DeliveryRobotService:
             self._ensure_hardware()
             self.chassis.update_position()
             self._set_robot_pose(*self.chassis.get_position())
+            self._set_raw_gps_pose_from_chassis()
         except Exception as exc:
             self._set_error(f"Position update failed: {exc}", change_state=False)
         finally:
@@ -297,9 +325,10 @@ class DeliveryRobotService:
         try:
             with self.hardware_lock:
                 self._ensure_hardware()
-                point_map = PointCloudMap.load(NAV_MAP_PATH)
+                point_map = self._load_point_map()
                 self.chassis.update_position()
                 self._set_robot_pose(*self.chassis.get_position())
+                self._set_raw_gps_pose_from_chassis()
                 start_xy = self._current_xy()
                 destination_xy = self._stop_to_xy(stop)
 
@@ -344,11 +373,22 @@ class DeliveryRobotService:
                     message=f"Arrived at {stop['name']}",
                     progress=1.0,
                     remaining_m=0.0,
+                    drive_mode=None,
+                    video_feedback_offset=None,
+                    route_error_deg=None,
+                    navigation_bend=None,
                 )
                 self._log_event(f"Arrived at {stop['name']}")
 
         except NavigationStopped:
-            self._set_status(state=STATE_STOPPED, message="Stopped")
+            self._set_status(
+                state=STATE_STOPPED,
+                message="Stopped",
+                drive_mode=None,
+                video_feedback_offset=None,
+                route_error_deg=None,
+                navigation_bend=None,
+            )
             self._log_event("Navigation stopped")
 
         except Exception as exc:
@@ -360,6 +400,7 @@ class DeliveryRobotService:
 
         if position is not None:
             self._set_robot_pose(*position)
+            self._set_raw_gps_pose_from_chassis()
 
         waypoint_count = max(int(update.get("waypoint_count") or 1), 1)
         waypoint_index = int(update.get("waypoint_index") or 0)
@@ -368,6 +409,10 @@ class DeliveryRobotService:
             active_waypoint_index=waypoint_index,
             progress=round(progress, 3),
             remaining_m=update.get("remaining_m"),
+            drive_mode=update.get("drive_mode"),
+            video_feedback_offset=update.get("video_feedback_offset"),
+            route_error_deg=update.get("route_error_deg"),
+            navigation_bend=update.get("navigation_bend"),
         )
 
     def _ensure_hardware(self):
@@ -375,13 +420,24 @@ class DeliveryRobotService:
             return
 
         self.arduino = ArduinoIO(port=ARDUINO_PORT)
+        point_map = self._load_point_map() if NAV_GPS_SNAP_ENABLED else None
         self.chassis, self.gps, self.imu = create_chassis(
             self.arduino,
             zero_imu=ZERO_IMU_ON_START,
             gps_port=GPS_PORT,
             gps_origin=GPS_ORIGIN,
+            gps_snap_enabled=NAV_GPS_SNAP_ENABLED,
+            gps_snap_point_map=point_map,
+            gps_snap_max_distance_m=NAV_GPS_SNAP_MAX_DISTANCE_M,
+            gps_snap_map_tolerance_m=NAV_GPS_SNAP_MAP_TOLERANCE_M,
         )
         self._log_event("Robot hardware initialized")
+
+    def _load_point_map(self):
+        if self.point_map is None:
+            self.point_map = PointCloudMap.load(NAV_MAP_PATH)
+
+        return self.point_map
 
     def _close_hardware(self):
         try:
@@ -409,6 +465,7 @@ class DeliveryRobotService:
         self.chassis = None
         self.gps = None
         self.imu = None
+        self.point_map = None
 
     def _stop_chassis(self):
         if self.chassis is None:
@@ -431,6 +488,37 @@ class DeliveryRobotService:
             robot["heading_deg"] = float(heading_deg)
             self.status_data["updated_at"] = time.time()
 
+    def _set_raw_gps_pose_from_chassis(self):
+        raw_xy = None
+        get_raw_gps_position = getattr(self.chassis, "get_raw_gps_position", None)
+
+        if callable(get_raw_gps_position):
+            raw_xy = get_raw_gps_position()
+
+        self._set_raw_gps_pose(raw_xy)
+
+    def _set_raw_gps_pose(self, raw_xy):
+        if raw_xy is None:
+            raw_gps = {
+                "lat": None,
+                "lon": None,
+                "x_m": None,
+                "y_m": None,
+            }
+        else:
+            x_m, y_m = raw_xy
+            lat, lon = xy_to_latlon(x_m, y_m, GPS_ORIGIN)
+            raw_gps = {
+                "lat": lat,
+                "lon": lon,
+                "x_m": float(x_m),
+                "y_m": float(y_m),
+            }
+
+        with self.lock:
+            self.status_data["raw_gps"] = raw_gps
+            self.status_data["updated_at"] = time.time()
+
     def _set_status(self, **changes):
         with self.lock:
             self.status_data.update(changes)
@@ -442,6 +530,10 @@ class DeliveryRobotService:
         changes = {
             "message": message,
             "last_error": message,
+            "drive_mode": None,
+            "video_feedback_offset": None,
+            "route_error_deg": None,
+            "navigation_bend": None,
         }
 
         if change_state:
@@ -549,15 +641,22 @@ class DebugCameraStreamer:
             "deepscene": 0,
         }
         self.error = None
+        self.camera = None
         self.thread = threading.Thread(target=self._run, daemon=True)
         self.thread.start()
 
     def status(self):
+        shared_status = None
+
+        if self.camera is not None:
+            shared_status = self.camera.status()
+
         return {
             "deepscene_enabled": self.deepscene_enabled,
             "error": self.error,
             "camera_frames": self.frame_ids["camera"],
             "deepscene_frames": self.frame_ids["deepscene"],
+            "shared_camera": shared_status,
         }
 
     def close(self):
@@ -601,25 +700,31 @@ class DebugCameraStreamer:
         try:
             import cv2
 
-            camera = Camera(
+            camera = acquire_shared_camera(
                 camera_uri=CAMERA_URI,
-                deepscene_enabled=self.deepscene_enabled,
+                deepscene_enabled=self.deepscene_enabled or NAV_ENABLE_VIDEO_FEEDBACK,
                 input_width=CAMERA_INPUT_WIDTH,
                 input_height=CAMERA_INPUT_HEIGHT,
                 input_rate=CAMERA_INPUT_RATE,
                 input_flip=CAMERA_INPUT_FLIP,
                 v4l2_controls=CAMERA_V4L2_CONTROLS,
+                auto_exposure=CAMERA_AUTO_EXPOSURE,
             )
+            self.camera = camera
             self._log(
                 "Started debug camera stream"
                 + (" with DeepScene" if self.deepscene_enabled else "")
             )
 
+            last_frame_id = 0
+
             while not self.stop_event.is_set():
-                frame = camera.capture()
+                last_frame_id, frame = camera.read_frame(
+                    timeout_ms=1000,
+                    last_frame_id=last_frame_id,
+                )
 
                 if frame is None:
-                    time.sleep(0.05)
                     continue
 
                 self._publish("camera", cv2, frame.original_bgr)
@@ -637,6 +742,7 @@ class DebugCameraStreamer:
                     camera.close()
                 except Exception:
                     pass
+            self.camera = None
 
     def _publish(self, mode, cv2, image):
         ok, jpeg = cv2.imencode(".jpg", image)

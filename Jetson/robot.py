@@ -10,6 +10,9 @@ from config import (
     MAX_FORWARD_CM_PER_SEC,
     MAX_TURN_DEG_PER_SEC,
     MOTOR_TUNING,
+    NAV_GPS_SNAP_ENABLED,
+    NAV_GPS_SNAP_MAP_TOLERANCE_M,
+    NAV_GPS_SNAP_MAX_DISTANCE_M,
     RIGHT_MOTOR,
     TRACK_WIDTH_CM,
     WHEEL_DIAMETER_CM,
@@ -36,6 +39,10 @@ def create_chassis(
     zero_imu: bool = True,
     gps_port: str = GPS_PORT,
     gps_origin=GPS_ORIGIN,
+    gps_snap_enabled: bool = NAV_GPS_SNAP_ENABLED,
+    gps_snap_point_map=None,
+    gps_snap_max_distance_m: float = NAV_GPS_SNAP_MAX_DISTANCE_M,
+    gps_snap_map_tolerance_m: float = NAV_GPS_SNAP_MAP_TOLERANCE_M,
 ):
     imu = IMU(arduino)
 
@@ -51,6 +58,10 @@ def create_chassis(
         imu,
         gps,
         max_turn_deg_per_sec=MAX_TURN_DEG_PER_SEC,
+        gps_snap_enabled=gps_snap_enabled,
+        gps_snap_point_map=gps_snap_point_map,
+        gps_snap_max_distance_m=gps_snap_max_distance_m,
+        gps_snap_map_tolerance_m=gps_snap_map_tolerance_m,
     )
 
     return chassis, gps, imu

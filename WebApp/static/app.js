@@ -1,6 +1,11 @@
 const elements = {
   adminLoginButton: document.getElementById("adminLoginButton"),
   adminPin: document.getElementById("adminPin"),
+  bendBaseHeadingText: document.getElementById("bendBaseHeadingText"),
+  bendCommandText: document.getElementById("bendCommandText"),
+  bendDetectedPill: document.getElementById("bendDetectedPill"),
+  bendDirectionText: document.getElementById("bendDirectionText"),
+  bendTrailHintText: document.getElementById("bendTrailHintText"),
   cameraFeed: document.getElementById("cameraFeed"),
   campusMap: document.getElementById("campusMap"),
   connectionState: document.getElementById("connectionState"),
@@ -23,10 +28,13 @@ const elements = {
   mapEditorPreview: document.getElementById("mapEditorPreview"),
   mapEditorSnapRadius: document.getElementById("mapEditorSnapRadius"),
   mapEditorSpacing: document.getElementById("mapEditorSpacing"),
+  mapEditorLayer: document.getElementById("mapEditorLayer"),
   mapFrame: document.getElementById("mapFrame"),
   plannedRoute: document.getElementById("plannedRoute"),
   progressText: document.getElementById("progressText"),
+  rawGpsMarker: document.getElementById("rawGpsMarker"),
   robotMarker: document.getElementById("robotMarker"),
+  routeLayer: document.getElementById("routeLayer"),
   statePill: document.getElementById("statePill"),
   statusText: document.getElementById("statusText"),
   stopButton: document.getElementById("stopButton"),
@@ -64,6 +72,7 @@ const state = {
   manualControlSequence: 0,
   manualControlTimer: null,
   manualControlRepeatMs: 220,
+  latestStatus: null,
   pollIntervalMs: 750,
 };
 
@@ -72,9 +81,12 @@ async function init() {
   state.config = await response.json();
   state.pollIntervalMs = Number(state.config.ui.poll_interval_ms) || 750;
 
+  elements.campusMap.addEventListener("load", refreshMapOverlayPlacement);
+  window.addEventListener("resize", refreshMapOverlayPlacement);
   elements.campusMap.src = state.config.map.image_url;
   populateStops(state.config.stops);
   wireEvents();
+  refreshMapOverlayPlacement();
   await refreshStatus();
   setInterval(refreshStatus, state.pollIntervalMs);
 }
@@ -468,15 +480,28 @@ function eventToMapPoint(event) {
     return null;
   }
 
-  const rect = editor.frame.getBoundingClientRect();
+  const frameRect = mapFrameContentRect(editor.frame);
+  const imageRect = mapImageFrameRect(editor.frame);
 
-  if (rect.width <= 0 || rect.height <= 0) {
+  if (imageRect.width <= 0 || imageRect.height <= 0) {
+    return null;
+  }
+
+  const imageX = event.clientX - frameRect.left - imageRect.left;
+  const imageY = event.clientY - frameRect.top - imageRect.top;
+
+  if (
+    imageX < 0 ||
+    imageY < 0 ||
+    imageX > imageRect.width ||
+    imageY > imageRect.height
+  ) {
     return null;
   }
 
   return normalizeMapPoint({
-    x: ((event.clientX - rect.left) / rect.width) * 100,
-    y: ((event.clientY - rect.top) / rect.height) * 100,
+    x: (imageX / imageRect.width) * 100,
+    y: (imageY / imageRect.height) * 100,
   });
 }
 
@@ -492,14 +517,13 @@ function nearestMapEditorEndpoint(point) {
     return null;
   }
 
-  const rect = editor.frame.getBoundingClientRect();
   const snapRadiusPx = mapEditorSnapRadiusPx();
-  const target = mapPointToFramePixels(point, rect);
+  const target = mapPointToFramePixels(point, editor.frame);
   let bestDistanceSq = snapRadiusPx * snapRadiusPx;
   let bestPoint = null;
 
   for (const endpoint of uniqueMapEditorEndpoints()) {
-    const candidate = mapPointToFramePixels(endpoint, rect);
+    const candidate = mapPointToFramePixels(endpoint, editor.frame);
     const distanceSq =
       (target.x - candidate.x) ** 2 + (target.y - candidate.y) ** 2;
 
@@ -512,11 +536,93 @@ function nearestMapEditorEndpoint(point) {
   return bestPoint ? cloneMapPoint(bestPoint) : null;
 }
 
-function mapPointToFramePixels(point, rect) {
+function mapPointToFramePixels(point, frame = elements.mapFrame) {
+  const imageRect = mapImageFrameRect(frame);
+
   return {
-    x: (point.x / 100) * rect.width,
-    y: (point.y / 100) * rect.height,
+    x: imageRect.left + (point.x / 100) * imageRect.width,
+    y: imageRect.top + (point.y / 100) * imageRect.height,
   };
+}
+
+function mapFrameContentRect(frame = elements.mapFrame) {
+  if (!frame) {
+    return { left: 0, top: 0, width: 0, height: 0 };
+  }
+
+  const rect = frame.getBoundingClientRect();
+  return {
+    left: rect.left + frame.clientLeft,
+    top: rect.top + frame.clientTop,
+    width: frame.clientWidth,
+    height: frame.clientHeight,
+  };
+}
+
+function mapImageFrameRect(frame = elements.mapFrame) {
+  if (!frame) {
+    return { left: 0, top: 0, width: 0, height: 0 };
+  }
+
+  const frameWidth = frame.clientWidth;
+  const frameHeight = frame.clientHeight;
+  const naturalWidth = elements.campusMap?.naturalWidth || 0;
+  const naturalHeight = elements.campusMap?.naturalHeight || 0;
+
+  if (
+    frameWidth <= 0 ||
+    frameHeight <= 0 ||
+    naturalWidth <= 0 ||
+    naturalHeight <= 0
+  ) {
+    return { left: 0, top: 0, width: frameWidth, height: frameHeight };
+  }
+
+  const scale = Math.min(frameWidth / naturalWidth, frameHeight / naturalHeight);
+  const width = naturalWidth * scale;
+  const height = naturalHeight * scale;
+
+  return {
+    left: (frameWidth - width) / 2,
+    top: (frameHeight - height) / 2,
+    width,
+    height,
+  };
+}
+
+function syncMapOverlayGeometry() {
+  const imageRect = mapImageFrameRect();
+
+  for (const layer of [elements.routeLayer, elements.mapEditorLayer]) {
+    if (!layer) {
+      continue;
+    }
+
+    layer.style.left = `${imageRect.left}px`;
+    layer.style.top = `${imageRect.top}px`;
+    layer.style.width = `${imageRect.width}px`;
+    layer.style.height = `${imageRect.height}px`;
+  }
+}
+
+function refreshMapOverlayPlacement() {
+  syncMapOverlayGeometry();
+
+  if (state.latestStatus) {
+    placeMarker(elements.robotMarker, state.latestStatus.robot);
+    renderRoute(state.latestStatus.planned_path || []);
+
+    if (state.latestStatus.destination) {
+      placeMarker(elements.destinationMarker, state.latestStatus.destination);
+    } else {
+      updateDestinationMarker();
+    }
+    return;
+  }
+
+  if (state.config) {
+    updateDestinationMarker();
+  }
 }
 
 function downloadMapEditorPointCloud() {
@@ -810,6 +916,9 @@ function showDebugError(message) {
 }
 
 function renderStatus(status) {
+  state.latestStatus = status;
+  syncMapOverlayGeometry();
+
   const stateLabel = titleCase(status.state || "idle");
   elements.statePill.textContent = stateLabel;
   elements.statusText.textContent = status.message || stateLabel;
@@ -819,8 +928,10 @@ function renderStatus(status) {
     status.active_waypoint_index === null || status.active_waypoint_index === undefined
       ? "-"
       : String(status.active_waypoint_index + 1);
+  renderBendGuidance(status.navigation_bend);
 
   placeMarker(elements.robotMarker, status.robot);
+  placeMarker(elements.rawGpsMarker, status.raw_gps);
   renderRoute(status.planned_path || []);
 
   if (status.destination) {
@@ -828,6 +939,38 @@ function renderStatus(status) {
   } else {
     updateDestinationMarker();
   }
+}
+
+function renderBendGuidance(bend) {
+  const detected = Boolean(bend?.detected);
+  const active = Boolean(bend?.active);
+  const direction = directionLabel(bend?.direction);
+  const trailDirection = directionLabel(bend?.trail_bias_direction);
+  const commandDirection = directionLabel(bend?.command_turn_direction);
+  const strengthText = isFiniteNumber(bend?.strength)
+    ? ` ${Math.round(Number(bend.strength) * 100)}%`
+    : "";
+
+  elements.bendDetectedPill.textContent = active
+    ? `Active ${direction}${strengthText}`
+    : detected
+      ? `Upcoming ${direction}`
+      : "No bend";
+  elements.bendDirectionText.textContent = detected
+    ? `${direction} ${formatSignedDegrees(bend.bend_angle_deg)} at ${formatMeters(bend.distance_m)}`
+    : "None";
+  elements.bendBaseHeadingText.textContent = isFiniteNumber(bend?.base_heading_deg)
+    ? `${Math.round(Number(bend.base_heading_deg))} deg`
+    : "-";
+  elements.bendTrailHintText.textContent =
+    active && isFiniteNumber(bend?.lookahead_error_deg)
+      ? `${trailDirection} ${formatSignedDegrees(bend.lookahead_error_deg)}`
+      : detected
+        ? "Inactive"
+        : "None";
+  elements.bendCommandText.textContent = isFiniteNumber(bend?.command_turn_deg_s)
+    ? `${commandDirection} ${formatSignedRate(bend.command_turn_deg_s)}, ${formatSpeed(bend.command_forward_cm_s)}`
+    : "-";
 }
 
 function updateDestinationMarker() {
@@ -850,6 +993,8 @@ function selectedStop() {
 }
 
 function renderRoute(path) {
+  syncMapOverlayGeometry();
+
   if (!path.length) {
     elements.plannedRoute.setAttribute("points", "");
     return;
@@ -877,21 +1022,77 @@ function placeMarker(marker, point) {
     return;
   }
 
-  const [x, y] = latlonToPercent(point.lat, point.lon);
-  marker.style.left = `${x}%`;
-  marker.style.top = `${y}%`;
+  const mapPoint = latlonToMapPoint(point.lat, point.lon);
+  const pixel = mapPointToFramePixels(mapPoint);
+  marker.style.left = `${pixel.x}px`;
+  marker.style.top = `${pixel.y}px`;
   marker.classList.add("visible");
 }
 
 function latlonToPercent(lat, lon) {
+  const point = latlonToMapPoint(lat, lon);
+  return [point.x, point.y];
+}
+
+function latlonToMapPoint(lat, lon) {
   const { top_left: topLeft, bottom_right: bottomRight } = state.config.map;
   const x = ((Number(lon) - topLeft.lon) / (bottomRight.lon - topLeft.lon)) * 100;
   const y = ((topLeft.lat - Number(lat)) / (topLeft.lat - bottomRight.lat)) * 100;
-  return [clamp(x, 0, 100), clamp(y, 0, 100)];
+  return normalizeMapPoint({ x, y });
 }
 
 function clamp(value, low, high) {
   return Math.max(low, Math.min(high, Number(value)));
+}
+
+function isFiniteNumber(value) {
+  return Number.isFinite(Number(value));
+}
+
+function directionLabel(value) {
+  const direction = String(value || "none");
+
+  if (direction === "left" || direction === "right") {
+    return titleCase(direction);
+  }
+
+  return "None";
+}
+
+function formatSignedDegrees(value) {
+  if (!isFiniteNumber(value)) {
+    return "-";
+  }
+
+  const rounded = Math.round(Number(value));
+  const sign = rounded > 0 ? "+" : "";
+  return `${sign}${rounded} deg`;
+}
+
+function formatSignedRate(value) {
+  if (!isFiniteNumber(value)) {
+    return "-";
+  }
+
+  const rounded = Math.round(Number(value));
+  const sign = rounded > 0 ? "+" : "";
+  return `${sign}${rounded} deg/s`;
+}
+
+function formatMeters(value) {
+  if (!isFiniteNumber(value)) {
+    return "-";
+  }
+
+  return `${Number(value).toFixed(1)} m`;
+}
+
+function formatSpeed(value) {
+  if (!isFiniteNumber(value)) {
+    return "- cm/s";
+  }
+
+  return `${Math.round(Number(value))} cm/s`;
 }
 
 function titleCase(value) {
